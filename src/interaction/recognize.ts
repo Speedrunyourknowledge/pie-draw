@@ -1,5 +1,5 @@
 import simplify from 'simplify-js';
-import { centerPoints, dist, newId, pointsBounds } from '../geometry';
+import { centerPoints, dist, newId, paint, pointsBounds } from '../geometry';
 import type { Pt, Shape } from '../types';
 
 export type Recognized =
@@ -8,7 +8,8 @@ export type Recognized =
   | { type: 'triangle'; x: number; y: number; points: Pt[] };
 
 const MIN_DIAG = 30; // strokes smaller than this are never snapped
-const CLOSE_GAP = 0.2; // start-to-end gap, as a fraction of the bbox diagonal
+const CLOSE_GAP = 0.2; // how close the stroke must come back to its start, as a fraction of the bbox diagonal
+const OVERSHOOT = 0.08; // how far it may run on past that closest point, as a fraction of the bbox diagonal
 const ASPECT_EQUAL = 0.15; // w and h within 15% -> square / circle
 const STRAIGHT_TURN = (32 * Math.PI) / 180; // turning angle below this is not a corner
 
@@ -87,21 +88,58 @@ function sharpestTurn(points: Pt[], span: number): number {
   return max;
 }
 
+/**
+ * Where a stroke closes: the point in its second half that comes closest to its start.
+ * `gap` is how far short of the start it got; `overshoot` is how much stroke follows that point.
+ */
+function closure(points: Pt[]): { end: number; gap: number; overshoot: number } {
+  const cum = [0];
+  for (let i = 1; i < points.length; i++) cum.push(cum[i - 1] + dist(points[i - 1], points[i]));
+  const total = cum[cum.length - 1];
+  let end = points.length - 1;
+  let gap = Infinity;
+  for (let i = points.length - 1; i > 0 && cum[i] >= total / 2; i--) {
+    const d = dist(points[0], points[i]);
+    if (d < gap) {
+      gap = d;
+      end = i;
+    }
+  }
+  return { end, gap, overshoot: total - cum[end] };
+}
+
 function nearlyEqual(a: number, b: number): boolean {
   return Math.abs(a - b) / Math.max(a, b) < ASPECT_EQUAL;
+}
+
+/** The stroke up to its closing point (any overshoot dropped), with its closure and bounds. */
+function closedPart(stroke: Pt[]) {
+  const close = closure(stroke);
+  const points = stroke.slice(0, close.end + 1);
+  const b = pointsBounds(points);
+  const w = b.maxX - b.minX, h = b.maxY - b.minY;
+  return { close, points, b, w, h, diag: Math.hypot(w, h) };
+}
+
+/** True once a stroke has come back to its start and then run on too far past it. */
+export function overshot(stroke: Pt[]): boolean {
+  if (stroke.length < 8) return false;
+  const { close, diag } = closedPart(stroke);
+  return close.gap <= diag * CLOSE_GAP && close.overshoot > diag * OVERSHOOT;
 }
 
 /**
  * Classifies a stroke as one of the five primitives, or null.
  * Prefers false negatives: anything ambiguous stays freehand.
  */
-export function recognize(points: Pt[]): Recognized | null {
+export function recognize(stroke: Pt[]): Recognized | null {
+  if (stroke.length < 8) return null;
+  // Judge the shape without any overshoot past the closing point.
+  const { close, points, b, w, h, diag } = closedPart(stroke);
   if (points.length < 8) return null;
-  const b = pointsBounds(points);
-  const w = b.maxX - b.minX, h = b.maxY - b.minY;
-  const diag = Math.hypot(w, h);
   if (diag < MIN_DIAG || Math.min(w, h) < diag * 0.12) return null; // too small or a line
-  if (dist(points[0], points[points.length - 1]) > diag * CLOSE_GAP) return null; // not closed
+  if (close.gap > diag * CLOSE_GAP) return null; // never came back near the start
+  if (close.overshoot > diag * OVERSHOOT) return null; // ran on too far past it
 
   const cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2;
   // Fill ratio separates the classes robustly: triangle ~0.5, ellipse ~0.79, rectangle ~1.
@@ -150,23 +188,23 @@ export function recognize(points: Pt[]): Recognized | null {
   return null;
 }
 
-/** Turns a recognition result into a shape drawn in the stroke's style (outline, current color). */
-export function shapeFromRecognized(r: Recognized, color: string): Shape {
+/** Turns a recognition result into a shape in the current line color and fill. */
+export function shapeFromRecognized(r: Recognized, color: string, fill: string | null): Shape {
   const common = {
     id: newId(),
     scaleX: 1,
     scaleY: 1,
     rotation: 0,
-    fill: null,
-    stroke: color,
-    strokeWidth: 3,
+    ...paint(color, fill),
   };
   return { ...common, ...r } as Shape;
 }
 
 /**
- * Hysteresis for the ghost preview: a new result (including "no match") is only shown
- * after it has been returned by `AGREE` consecutive checks, so the ghost does not flicker.
+ * Hysteresis for the ghost preview: once a ghost is up, a different result (including
+ * "no match") only replaces it after `AGREE` consecutive checks, so it does not flicker.
+ * The first match shows immediately, and keeps its geometry while the type holds.
+ * Overshoot skips this via `clear()`.
  */
 export class GhostTracker {
   static AGREE = 3;
@@ -174,12 +212,25 @@ export class GhostTracker {
   private candidate: string | null = null;
   private count = 0;
 
+  /** Drops the ghost at once, e.g. on overshoot, which only gets worse as the stroke goes on. */
+  clear(): null {
+    this.shown = null;
+    this.candidate = null;
+    this.count = 0;
+    return null;
+  }
+
   update(r: Recognized | null): Recognized | null {
     const type = r?.type ?? null;
     if (type === (this.shown?.type ?? null)) {
       this.candidate = null;
       this.count = 0;
-      this.shown = r; // same type: follow the stroke's latest geometry
+      return this.shown; // same type: keep the geometry it first appeared with
+    }
+    if (!this.shown) {
+      // Appear at once: a stroke may only match as it closes, right before release,
+      // and the shape it snaps to should never arrive unannounced.
+      this.shown = r;
       return this.shown;
     }
     if (type === this.candidate) this.count++;

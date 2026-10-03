@@ -36,10 +36,21 @@ html, body, #root {
 .canvas.panning, .canvas.panning .shape { cursor: grabbing; }
 .canvas.hand, .canvas.hand .shape { cursor: grab; }
 .canvas.hand .shape:hover { filter: none; }
+/* Eraser: an eraser cursor (hotspot at its working edge, lower left), and the shape about to be
+   erased gets a red outline. The target is tracked in JS, since :hover sticks to the canvas mid-drag. */
+.canvas.eraser, .canvas.eraser .shape {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='1 1 20 20' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8.2 16.5 L3.6 11.9 a1.4 1.4 0 0 1 0 -2 L10.4 3.1 a1.4 1.4 0 0 1 2 0 L16.9 7.6 a1.4 1.4 0 0 1 0 2 L10 16.5 Z M6.6 8.3 L11.7 13.4' stroke='white' stroke-width='3.6'/%3E%3Cpath d='M8.2 16.5 L3.6 11.9 a1.4 1.4 0 0 1 0 -2 L10.4 3.1 a1.4 1.4 0 0 1 2 0 L16.9 7.6 a1.4 1.4 0 0 1 0 2 L10 16.5 Z M6.6 8.3 L11.7 13.4' fill='white' stroke='%231f2933' stroke-width='1.6'/%3E%3C/svg%3E") 5 15, crosshair;
+}
+.canvas.eraser .shape:hover { filter: none; }
+/* The visible outline turns red (freehand's wide transparent grab path is left alone). */
+.canvas.eraser .shape.erase-target { filter: drop-shadow(0 0 3px rgba(214, 52, 52, 0.3)); }
+.canvas.eraser .shape.erase-target :is([pointer-events='all'], [pointer-events='none']) { stroke: rgba(214, 52, 52, 0.7); }
 
 /* ---- shapes ---- */
 .shape { cursor: move; }
-.shape:hover { filter: drop-shadow(0 0 2px rgba(62, 99, 221, 0.55)); }
+.shape:hover {
+  filter: drop-shadow(0 0 1.5px rgba(62, 99, 221, 0.70)) drop-shadow(0 0 4px rgba(62, 99, 221, 0.3));
+}
 .canvas.mode-drawing .shape, .canvas.mode-menuOpen .shape { cursor: inherit; }
 .canvas.mode-drawing .shape:hover, .canvas.mode-menuOpen .shape:hover { filter: none; }
 
@@ -134,6 +145,10 @@ html, body, #root {
   fill: currentColor;
 }
 .pie-swatch { stroke: rgba(255, 255, 255, 0.9); stroke-width: 2; }
+.pie-swatch-line { fill: #fff; stroke-width: 4.5; }
+.pie-swatch-none circle { fill: #fff; stroke: rgba(31, 41, 51, 0.25); stroke-width: 1; }
+.pie-swatch-none path { stroke: var(--cancel); stroke-width: 2; stroke-linecap: round; }
+.pie-icon .icon-thick { stroke-width: 3.2; }
 .pie-more { fill: none; stroke: currentColor; stroke-width: 1.5; color: var(--ink); opacity: 0.5; }
 .pie-wedge.active .pie-more { color: #fff; opacity: 0.9; }
 .pie-sub.preview { opacity: 0.55; }
@@ -322,8 +337,21 @@ button { font: inherit; color: inherit; }
 .keys td:first-child { padding-right: 12px; white-space: nowrap; }
 .help-foot { margin-top: 16px; text-align: center; color: var(--muted); font-size: 12px; }
 
-/* ---- color picker (top of the corner cluster) ---- */
-.color-picker { position: relative; width: 48px; height: 48px; }
+/* ---- color pickers (top of the corner cluster): Fill above Line ---- */
+.color-pickers { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.color-picker { position: relative; width: 48px; height: 62px; }
+.color-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 49px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  pointer-events: none;
+}
 .color-current {
   width: 48px;
   height: 48px;
@@ -336,6 +364,16 @@ button { font: inherit; color: inherit; }
   transition: transform 100ms, background 120ms;
 }
 .color-current:hover { transform: scale(1.06); }
+.color-current:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+/* Line swatches are rings (an outline in that color); fill swatches are solid discs. */
+.color-current.line, .fan-swatch.line, .color-drag.line {
+  background: #fff;
+  background-image: radial-gradient(circle, #fff 0 38%, var(--swatch) calc(38% + 0.5px));
+}
+/* No fill: white with a red slash. */
+.color-current.none, .fan-swatch.none, .color-drag.none {
+  background: linear-gradient(135deg, #fff calc(50% - 1.5px), var(--cancel) calc(50% - 1.5px) calc(50% + 1.5px), #fff calc(50% + 1.5px));
+}
 .color-current.open { box-shadow: 0 0 0 2px var(--accent), 0 4px 14px rgba(31, 41, 51, 0.15); }
 .fan-swatch {
   position: absolute;
@@ -349,15 +387,15 @@ button { font: inherit; color: inherit; }
   box-shadow: 0 0 0 1px var(--panel-line), 0 3px 10px rgba(31, 41, 51, 0.18);
   cursor: pointer;
   touch-action: none;
-  transform: translate(var(--x), var(--y));
-  animation: fan-out 160ms ease-out backwards;
-  animation-delay: calc(var(--i) * 18ms);
+  transform: translate(var(--x), var(--y)); /* no fan-out animation: the palette appears instantly */
 }
+/* Fans sit a little below their button so they stay close to it. The line fan opens in the same
+   spot as the fill fan (one picker height + gap up), so it never covers the Fill button. */
+.fan-swatch.fill { top: calc(4px + 20px); }
+.fan-swatch.line { top: calc(4px + 20px - 68px); }
 .fan-swatch:hover { transform: translate(var(--x), var(--y)) scale(1.12); }
 .fan-swatch.active { box-shadow: 0 0 0 2px var(--swatch), 0 3px 10px rgba(31, 41, 51, 0.18); }
-@keyframes fan-out {
-  from { transform: translate(0, 0) scale(0.4); opacity: 0; }
-}
+.fan-swatch.none.active { box-shadow: 0 0 0 2px var(--cancel), 0 3px 10px rgba(31, 41, 51, 0.18); }
 .fan-key {
   position: absolute;
   right: -7px;
@@ -377,6 +415,7 @@ button { font: inherit; color: inherit; }
   margin: -13px 0 0 -13px;
   border-radius: 50%;
   border: 3px solid #fff;
+  background: var(--swatch);
   box-shadow: 0 4px 12px rgba(31, 41, 51, 0.3);
   pointer-events: none;
   z-index: 20;

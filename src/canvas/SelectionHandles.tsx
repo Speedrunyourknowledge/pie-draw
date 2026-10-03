@@ -5,13 +5,13 @@ import type { Shape } from '../types';
 export type Corner = 'nw' | 'ne' | 'sw' | 'se';
 
 const SIZE = 10;
-const PAD = 4;
+export const SELECTION_PAD = 4;
 
 /** Drawn in screen space so handles stay the same size at any zoom. */
 export function SelectionHandles({ shape, view }: { shape: Shape; view: View }) {
   const b = worldBounds(shape);
-  const x0 = b.minX * view.zoom + view.x - PAD, y0 = b.minY * view.zoom + view.y - PAD;
-  const x1 = b.maxX * view.zoom + view.x + PAD, y1 = b.maxY * view.zoom + view.y + PAD;
+  const x0 = b.minX * view.zoom + view.x - SELECTION_PAD, y0 = b.minY * view.zoom + view.y - SELECTION_PAD;
+  const x1 = b.maxX * view.zoom + view.x + SELECTION_PAD, y1 = b.maxY * view.zoom + view.y + SELECTION_PAD;
   const corners: [Corner, number, number][] = [
     ['nw', x0, y0],
     ['ne', x1, y0],

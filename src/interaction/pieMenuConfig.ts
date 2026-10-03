@@ -1,9 +1,7 @@
 import { newDoc, openDoc, saveDoc } from '../file/fileOps';
-import { makePrimitive } from '../geometry';
+import { canFill, makePrimitive } from '../geometry';
 import { useStore } from '../store';
-import { PALETTE, type Pt } from '../types';
-
-export type MenuContext = 'canvas' | 'shape';
+import { PALETTE, type Pt, type Shape } from '../types';
 
 export interface CommandContext {
   origin: Pt; // where the menu was opened, in canvas coordinates
@@ -15,7 +13,7 @@ export interface PieItem {
   id: string;
   label: string;
   icon: string; // key into PieMenu's icon set
-  swatch?: string; // color submenu entries draw a swatch instead of an icon
+  swatch?: { color: string | null; kind: 'line' | 'fill' }; // color entries draw a swatch instead of an icon
   run?: (ctx: CommandContext) => void;
   children?: PieItem[];
 }
@@ -24,10 +22,47 @@ const st = () => useStore.getState();
 
 const create =
   (type: 'square' | 'rectangle' | 'circle' | 'ellipse' | 'triangle') => (ctx: CommandContext) => {
-    const shape = makePrimitive(type, ctx.origin[0], ctx.origin[1], st().currentColor);
+    const shape = makePrimitive(type, ctx.origin[0], ctx.origin[1], st().currentColor, st().currentFill);
     st().addShape(shape, true);
     ctx.pulse(shape.id);
   };
+
+/** Line color submenu: recolors the shape under the menu, or sets the color for new ones. */
+const lineItem = (prefix: string): PieItem => ({
+  id: prefix,
+  label: 'Line',
+  icon: 'line',
+  children: PALETTE.map((c) => ({
+    id: `${prefix}-${c.name}`,
+    label: c.name,
+    icon: 'swatch',
+    swatch: { color: c.value, kind: 'line' },
+    run: () => st().setColor(c.value),
+  })),
+});
+
+/** Fill submenu: the same colors plus None. */
+const fillItem = (prefix: string): PieItem => ({
+  id: prefix,
+  label: 'Fill',
+  icon: 'fill',
+  children: [
+    ...PALETTE.map((c) => ({
+      id: `${prefix}-${c.name}`,
+      label: c.name,
+      icon: 'swatch',
+      swatch: { color: c.value, kind: 'fill' as const },
+      run: () => st().setFill(c.value),
+    })),
+    {
+      id: `${prefix}-none`,
+      label: 'None',
+      icon: 'swatch',
+      swatch: { color: null, kind: 'fill' },
+      run: () => st().setFill(null),
+    },
+  ],
+});
 
 /**
  * Fixed layouts so each command always lives in the same direction.
@@ -39,29 +74,9 @@ export const CANVAS_MENU: PieItem[] = [
   { id: 'circle', label: 'Circle', icon: 'circle', run: create('circle') },
   { id: 'ellipse', label: 'Ellipse', icon: 'ellipse', run: create('ellipse') },
   { id: 'triangle', label: 'Triangle', icon: 'triangle', run: create('triangle') },
-  {
-    // Sets the drawing color for new shapes and strokes (nothing is selected on empty canvas).
-    id: 'draw-color',
-    label: 'Color',
-    icon: 'color',
-    children: PALETTE.map((c) => ({
-      id: `draw-color-${c.name}`,
-      label: c.name,
-      icon: 'swatch',
-      swatch: c.value,
-      run: () => st().setColor(c.value),
-    })),
-  },
-  {
-    id: 'paste',
-    label: 'Paste',
-    icon: 'paste',
-    run: (ctx) => {
-      st().paste({ x: ctx.origin[0], y: ctx.origin[1] });
-      const id = st().selectedId;
-      if (id) ctx.pulse(id);
-    },
-  },
+  // Line and Fill set the style of new shapes (nothing is selected on empty canvas).
+  lineItem('draw-line'),
+  fillItem('draw-fill'),
   {
     id: 'file',
     label: 'File',
@@ -76,25 +91,19 @@ export const CANVAS_MENU: PieItem[] = [
 ];
 
 export const SHAPE_MENU: PieItem[] = [
-  {
-    id: 'color',
-    label: 'Color',
-    icon: 'color',
-    children: PALETTE.map((c) => ({
-      id: `color-${c.name}`,
-      label: c.name,
-      icon: 'swatch',
-      swatch: c.value,
-      run: () => st().setColor(c.value),
-    })),
-  },
+  lineItem('line'),
   { id: 'copy', label: 'Copy', icon: 'copy', run: () => st().copy() },
   { id: 'front', label: 'To Front', icon: 'front', run: () => st().bringToFront() },
   { id: 'delete', label: 'Delete', icon: 'delete', run: () => st().deleteSelected() },
   { id: 'back', label: 'To Back', icon: 'back', run: () => st().sendToBack() },
   { id: 'cut', label: 'Cut', icon: 'cut', run: () => st().cut() },
+  fillItem('fill'),
 ];
 
-export function menuFor(context: MenuContext): PieItem[] {
-  return context === 'shape' ? SHAPE_MENU : CANVAS_MENU;
+/** Freehand lines have nothing to fill, so their menu drops Fill. */
+export const LINE_MENU: PieItem[] = SHAPE_MENU.filter((item) => item.id !== 'fill');
+
+export function menuFor(shape: Shape | null): PieItem[] {
+  if (!shape) return CANVAS_MENU;
+  return canFill(shape) ? SHAPE_MENU : LINE_MENU;
 }

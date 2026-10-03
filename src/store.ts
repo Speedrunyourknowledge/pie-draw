@@ -1,9 +1,11 @@
 import { create } from 'zustand';
-import { newId } from './geometry';
+import { canFill, newId } from './geometry';
 import { kbd } from './platform';
 import { PALETTE, type Shape, type TransformPatch } from './types';
 
-export type Mode = 'idle' | 'drawing' | 'dragging' | 'scaling' | 'menuOpen';
+export type Mode = 'idle' | 'drawing' | 'dragging' | 'scaling' | 'erasing' | 'menuOpen';
+/** What a plain left-drag does: draw/move (default), pan the view, or erase whole shapes. */
+export type Tool = 'draw' | 'hand' | 'eraser';
 
 export interface Toast {
   id: number;
@@ -28,7 +30,8 @@ interface AppState {
   shapes: Shape[]; // array order = z-order
   selectedId: string | null;
   clipboard: Shape | null;
-  currentColor: string;
+  currentColor: string; // line color for new shapes and strokes
+  currentFill: string | null; // fill for new closed shapes; null = outline only
   mode: Mode;
   fileHandle: FileSystemFileHandle | null; // for Save vs Save As
   fileName: string | null;
@@ -39,24 +42,31 @@ interface AppState {
   view: View; // not part of the document or the undo history
   helpOpen: boolean;
   dropTargetId: string | null; // shape under a color being dragged from the dock
-  handTool: boolean; // left-drag pans instead of moving/drawing
+  tool: Tool;
 
   /** Records the current shapes for undo. Call once before a change (or at the start of a drag). */
   checkpoint: () => void;
   addShape: (shape: Shape, select?: boolean) => void;
   /** Live update without a history entry; pair with checkpoint() at gesture start. */
   updateShape: (id: string, patch: TransformPatch) => void;
+  /** Live removal without a history entry; pair with checkpoint() at gesture start. */
+  eraseShape: (id: string) => void;
   select: (id: string | null) => void;
   deleteSelected: () => void;
   copy: () => void;
   cut: () => void;
   /** Pastes centered at `at`, or offset from the last copy/paste when omitted. */
   paste: (at?: { x: number; y: number }) => void;
+  /** Recolors the selected shape's line, or sets the line color for new shapes. */
   setColor: (color: string) => void;
-  /** Recolors one shape (keeping fill vs outline) and makes it the drawing color. */
+  /** Recolors one shape's line and makes it the drawing color. */
   recolor: (id: string, color: string) => void;
+  /** Changes the selected shape's fill, or sets the fill for new shapes. */
+  setFill: (fill: string | null) => void;
+  /** Changes one closed shape's fill and makes it the default fill. */
+  refill: (id: string, fill: string | null) => void;
   setDropTarget: (id: string | null) => void;
-  setHandTool: (on: boolean) => void;
+  setTool: (tool: Tool) => void;
   bringToFront: () => void;
   sendToBack: () => void;
   nudge: (dx: number, dy: number) => void;
@@ -99,6 +109,7 @@ export const useStore = create<AppState>()((set, get) => {
     selectedId: null,
     clipboard: null,
     currentColor: PALETTE[0].value,
+    currentFill: null,
     mode: 'idle',
     fileHandle: null,
     fileName: null,
@@ -109,7 +120,7 @@ export const useStore = create<AppState>()((set, get) => {
     view: HOME_VIEW,
     helpOpen: false,
     dropTargetId: null,
-    handTool: false,
+    tool: 'draw',
 
     checkpoint: () =>
       set((st) => ({ past: [...st.past, st.shapes].slice(-HISTORY_LIMIT), future: [], dirty: true })),
@@ -126,6 +137,12 @@ export const useStore = create<AppState>()((set, get) => {
       })),
 
     select: (id) => set({ selectedId: id }),
+
+    eraseShape: (id) =>
+      set((st) => ({
+        shapes: st.shapes.filter((s) => s.id !== id),
+        selectedId: st.selectedId === id ? null : st.selectedId,
+      })),
 
     deleteSelected: () => {
       const { selectedId, shapes } = get();
@@ -173,17 +190,27 @@ export const useStore = create<AppState>()((set, get) => {
     recolor: (id, color) => {
       set({ currentColor: color });
       const s = get().shapes.find((x) => x.id === id);
-      if (!s || (s.fill ?? s.stroke) === color) return;
-      change({
-        shapes: get().shapes.map((x) =>
-          x.id === id ? { ...x, fill: x.fill ? color : null, stroke: x.stroke ? color : null } : x,
-        ),
-      });
+      if (!s || s.stroke === color) return;
+      change({ shapes: get().shapes.map((x) => (x.id === id ? { ...x, stroke: color } : x)) });
+    },
+
+    setFill: (fill) => {
+      const s = selected();
+      if (s) get().refill(s.id, fill);
+      else set({ currentFill: fill });
+    },
+
+    refill: (id, fill) => {
+      const s = get().shapes.find((x) => x.id === id);
+      if (!s || !canFill(s)) return; // open lines have no inside to fill
+      set({ currentFill: fill });
+      if (s.fill === fill) return;
+      change({ shapes: get().shapes.map((x) => (x.id === id ? { ...x, fill } : x)) });
     },
 
     setDropTarget: (dropTargetId) => set({ dropTargetId }),
 
-    setHandTool: (handTool) => set({ handTool }),
+    setTool: (tool) => set({ tool, selectedId: tool === 'draw' ? get().selectedId : null }),
 
     bringToFront: () => {
       const s = selected();

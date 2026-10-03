@@ -45,8 +45,13 @@ export function useKeyboard(onEscape: () => void) {
       else if (key === '-' || key === '_') zoomOut();
       else if (key === '0') resetZoom();
       else if (key === 'f') fitToContent();
-      else if (key === 'h') st.setHandTool(!st.handTool);
-      else if (/^[1-5]$/.test(key)) st.setColor(PALETTE[Number(key) - 1].value);
+      else if (key === 'h') st.setTool(st.tool === 'hand' ? 'draw' : 'hand');
+      else if (key === 'e') st.setTool(st.tool === 'eraser' ? 'draw' : 'eraser');
+      // Shift+digit (matched by physical key, since Shift changes e.key) sets the fill; 0 clears it.
+      else if (e.shiftKey && /^Digit[0-5]$/.test(e.code)) {
+        const n = Number(e.code.slice(5));
+        st.setFill(n === 0 ? null : PALETTE[n - 1].value);
+      } else if (/^[1-5]$/.test(key)) st.setColor(PALETTE[Number(key) - 1].value);
       else if (key.startsWith('arrow')) {
         const dx = key === 'arrowleft' ? -1 : key === 'arrowright' ? 1 : 0;
         const dy = key === 'arrowup' ? -1 : key === 'arrowdown' ? 1 : 0;

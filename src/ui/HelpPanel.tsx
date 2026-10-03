@@ -22,16 +22,18 @@ const KEYS: [string, string][] = [
   [`${kbd('mod+shift+z')}  or  ${kbd('mod+y')}`, 'Redo'],
   [`${kbd('mod+x')} / ${kbd('mod+c')} / ${kbd('mod+v')}`, 'Cut / copy / paste'],
   ['Delete', 'Delete selected shape'],
-  ['1 – 5', 'Recolor selection / set drawing color'],
+  ['1 – 5', 'Line color (of the selection, or for new shapes)'],
+  ['Shift+1 – 5  /  Shift+0', 'Fill color / no fill'],
   ['Arrow keys', 'Nudge selection (with Shift: 10 px), or pan when nothing is selected'],
   ['H', 'Hand tool on / off'],
+  ['E', 'Eraser on / off (click or drag across shapes to erase them)'],
   ['+  /  −', 'Zoom in / out'],
   ['0', 'Zoom to 100%'],
   ['F', 'Fit all shapes on screen'],
   [`${kbd('mod+s')}  /  ${kbd('mod+shift+s')}`, 'Save / Save as'],
   [kbd('mod+o'), 'Open'],
   [kbd('mod+alt+n'), 'New drawing'],
-  ['Esc', 'Close menu, leave hand tool, deselect'],
+  ['Esc', 'Close menu, leave hand tool or eraser, deselect'],
   ['?', 'Show this help'],
 ];
 
@@ -62,7 +64,7 @@ export function HelpPanel() {
           </div>
           <ul className="help-list">
             <li><b>Choose</b> by dragging toward a wedge and releasing.</li>
-            <li><b>Submenus</b> (File, Color): keep dragging outward into the outer ring, then sideways to the item, all in one stroke.</li>
+            <li><b>Submenus</b> (File, Line, Fill): keep dragging outward into the outer ring, then sideways to the item, all in one stroke.</li>
             <li><b>Cancel</b> by releasing on the red × in the center, <b>or by dragging past the menu's edge</b> and releasing. Esc works too.</li>
             <li>A quick right-click keeps the menu open, so you can click an item instead.</li>
           </ul>
@@ -78,9 +80,9 @@ export function HelpPanel() {
             </ul>
             <h3>Color</h3>
             <ul className="help-list">
-              <li>The <b>round swatch</b> in the lower right shows the current color (of the selected shape, or for new shapes).</li>
-              <li><b>Click it</b> to fan out the 5 colors, then click one. Keys <Key>1</Key>–<Key>5</Key> also work.</li>
-              <li><b>Drag a swatch onto any shape</b> to paint it directly.</li>
+              <li>Two swatches in the lower right: <b>Line</b> (the ring) and <b>Fill</b> (the disc; a red slash means no fill). They show the selected shape's colors, or what new shapes will get.</li>
+              <li><b>Click one</b> to fan out the colors, then click one. Keys <Key>1</Key>–<Key>5</Key> set the line, <Key>Shift</Key>+<Key>1</Key>–<Key>5</Key> the fill, <Key>Shift</Key>+<Key>0</Key> removes it.</li>
+              <li><b>Drag a swatch onto any shape</b> to paint it directly. Freehand lines have a line color only.</li>
             </ul>
             <h3>Move around</h3>
             <ul className="help-list">

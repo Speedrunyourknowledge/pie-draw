@@ -8,6 +8,7 @@ export function TopBar() {
   const canUndo = useStore((s) => s.past.length > 0);
   const canRedo = useStore((s) => s.future.length > 0);
   const empty = useStore((s) => s.shapes.length === 0);
+  const canPaste = useStore((s) => s.clipboard !== null);
   const st = useStore.getState;
 
   return (
@@ -24,6 +25,17 @@ export function TopBar() {
         </span>
       </div>
       <nav className="topbar-actions">
+        <button
+          disabled={!canPaste}
+          onClick={() => st().paste()}
+          title={canPaste ? `Paste (${kbd('mod+v')})` : 'Paste: copy or cut a shape first'}
+        >
+          <svg viewBox="0 0 20 20">
+            <path d="M7 4 H5.5 V17 H14.5 V4 H13 M7.5 3 H12.5 V5.5 H7.5 Z" />
+          </svg>
+          <span>Paste</span>
+        </button>
+        <span className="sep" />
         <button disabled={!canUndo} onClick={() => st().undo()} title={`Undo (${kbd('mod+z')})`}>
           <svg viewBox="0 0 20 20"><path d="M7 5 L3 9 L7 13 M3 9 H12 a4.5 4.5 0 0 1 0 9 H9" /></svg>
           <span>Undo</span>

@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import type { Pt } from '../types';
 import type { PieItem } from './pieMenuConfig';
 import {
-  CANCEL_RADIUS,
+  cancelRadius,
   DEAD_ZONE,
   GAP,
   R_INNER,
@@ -31,12 +31,6 @@ const ICONS: Record<string, ReactNode> = {
   circle: <circle r={7.5} />,
   ellipse: <ellipse rx={9.5} ry={6} />,
   triangle: <polygon points="0,-8 8.5,7 -8.5,7" />,
-  paste: (
-    <>
-      <rect x={-6} y={-6} width={12} height={14} rx={1.5} />
-      <path d="M-3 -6 v-2 h6 v2" />
-    </>
-  ),
   file: <path d="M-6 -8 h8 l4 4 v12 h-12z M2 -8 v4 h4" />,
   new: <path d="M-6 -8 h8 l4 4 v12 h-12z M0 -1 v6 M-3 2 h6" />,
   open: <path d="M-8 6 v-12 h5 l2 2 h8 v3 M-8 6 l3 -8 h12 l-3 8z" />,
@@ -52,13 +46,8 @@ const ICONS: Record<string, ReactNode> = {
       <path d="M-3 3 l5 -5 l2 2 l-5 5 h-2z" />
     </>
   ),
-  color: (
-    <>
-      <circle cx={-3} cy={-2} r={4.5} />
-      <circle cx={3} cy={-2} r={4.5} />
-      <circle cx={0} cy={3} r={4.5} />
-    </>
-  ),
+  line: <circle r={7} className="icon-thick" />,
+  fill: <circle r={7.5} className="icon-solid" />,
   copy: (
     <>
       <rect x={-7} y={-7} width={10} height={10} rx={1.5} />
@@ -87,11 +76,23 @@ const ICONS: Record<string, ReactNode> = {
   ),
 };
 
+/** Line colors draw as a ring and fills as a disc, matching the swatches in the corner. */
+function Swatch({ color, kind }: { color: string | null; kind: 'line' | 'fill' }) {
+  if (kind === 'line') return <circle cy={-6} r={7} className="pie-swatch-line" stroke={color ?? undefined} />;
+  if (color) return <circle cy={-6} r={9} fill={color} className="pie-swatch" />;
+  return (
+    <g className="pie-swatch-none" transform="translate(0 -6)">
+      <circle r={9} />
+      <path d="M-6.4 6.4 L6.4 -6.4" />
+    </g>
+  );
+}
+
 function ItemFace({ item, at }: { item: PieItem; at: Pt }) {
   return (
     <g transform={`translate(${at[0]} ${at[1]})`} className="pie-face">
       {item.swatch ? (
-        <circle cy={-6} r={9} fill={item.swatch} className="pie-swatch" />
+        <Swatch {...item.swatch} />
       ) : (
         <g className="pie-icon" transform="translate(0 -7)">
           {ICONS[item.icon]}
@@ -116,14 +117,15 @@ export function PieMenu({ items, origin, pointer, selection }: Props) {
   const half = Math.PI / n;
   const dx = pointer[0] - origin[0], dy = pointer[1] - origin[1];
   const inDead = selection.index < 0;
-  const outside = Math.hypot(dx, dy) > CANCEL_RADIUS;
+  const edge = cancelRadius(items, dx, dy, selection.locked);
+  const outside = Math.hypot(dx, dy) > edge;
   // Show a submenu ring as a preview while its parent is highlighted, solid once entered.
   const subParent = selection.index >= 0 && items[selection.index].children ? selection.index : -1;
 
   return (
     <g className="pie" transform={`translate(${origin[0]} ${origin[1]})`}>
       {/* Faint edge: releasing beyond it cancels, just like the center ×. */}
-      <circle r={CANCEL_RADIUS} className={`pie-edge ${outside ? 'outside' : ''}`} />
+      <circle r={edge} className={`pie-edge ${outside ? 'outside' : ''}`} />
       <circle r={R_SUB + 2} className="pie-backdrop" />
       {items.map((item, i) => {
         const a = itemAngle(i, n);

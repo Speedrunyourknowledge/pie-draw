@@ -22,7 +22,10 @@ export default function App() {
       <TopBar />
       {/* One corner cluster for the few on-screen controls, away from the work area. */}
       <div className="corner">
-        <ColorPicker />
+        <div className="color-pickers">
+          <ColorPicker kind="fill" />
+          <ColorPicker kind="line" />
+        </div>
         <NavControls />
       </div>
       <HelpPanel />

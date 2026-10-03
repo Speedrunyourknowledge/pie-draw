@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
+import { canFill } from '../geometry';
 import { useStore } from '../store';
 import { PALETTE } from '../types';
 
-const DRAG_SLOP = 5;
+const DRAG_THRESHOLD = 5;
 const FAN_RADIUS = 84; // swatches fan out on a quarter arc, from left to straight up
+const FAN_STEP = 34; // min distance between neighboring swatches along the arc
+
+type Kind = 'line' | 'fill';
 
 interface Drag {
-  color: string;
+  color: string | null;
   start: [number, number];
   at: [number, number];
   moved: boolean;
@@ -16,21 +20,35 @@ function shapeIdAt(x: number, y: number): string | null {
   return document.elementFromPoint(x, y)?.closest('[data-id]')?.getAttribute('data-id') ?? null;
 }
 
+const LINE_OPTIONS: { name: string; value: string | null }[] = [...PALETTE];
+const FILL_OPTIONS: { name: string; value: string | null }[] = [...PALETTE, { name: 'None', value: null }];
+
+const colorName = (c: string | null) => (c ? (PALETTE.find((p) => p.value === c)?.name ?? '') : 'None');
+
 /**
- * One swatch shows the current color. Click it to fan out the palette and pick;
- * drag it (or a fanned swatch) onto any shape to paint that shape.
+ * A swatch for the line color (drawn as a ring) or the fill (a disc; white with a slash for none).
+ * Click it to fan out the palette and pick; drag it (or a fanned swatch) onto a shape to paint it.
  */
-export function ColorPicker() {
-  const currentColor = useStore((s) => s.currentColor);
+export function ColorPicker({ kind }: { kind: Kind }) {
+  const current = useStore((s) => (kind === 'line' ? s.currentColor : s.currentFill));
   const selected = useStore((s) => s.shapes.find((x) => x.id === s.selectedId) ?? null);
   const [open, setOpen] = useState(false);
   const [drag, setDrag] = useState<Drag | null>(null);
   const dragRef = useRef<Drag | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  // With a shape selected the swatch shows (and edits) that shape's color.
-  const shown = selected ? (selected.fill ?? selected.stroke ?? currentColor) : currentColor;
-  const shownName = PALETTE.find((c) => c.value === shown)?.name ?? '';
+  const options = kind === 'line' ? LINE_OPTIONS : FILL_OPTIONS;
+  const label = kind === 'line' ? 'Line' : 'Fill';
+  // Freehand lines are open, so the fill swatch is off while one is selected.
+  const disabled = kind === 'fill' && !!selected && !canFill(selected);
+  // With a shape selected the swatch shows (and edits) that shape's line or fill.
+  const shown = selected && !disabled ? (kind === 'line' ? selected.stroke : selected.fill) : current;
+  const shownName = colorName(shown);
+  const apply = (c: string | null) => {
+    const st = useStore.getState();
+    if (kind === 'line') st.setColor(c!);
+    else st.setFill(c);
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -56,7 +74,14 @@ export function ColorPicker() {
     setDrag(d);
   };
 
-  const handlers = (color: string, onClick: () => void) => ({
+  /** The shape a dragged swatch would paint; fills skip open lines. */
+  const targetAt = (x: number, y: number) => {
+    const id = shapeIdAt(x, y);
+    const s = id ? useStore.getState().shapes.find((sh) => sh.id === id) : null;
+    return s && (kind === 'line' || canFill(s)) ? s.id : null;
+  };
+
+  const handlers = (color: string | null, onClick: () => void) => ({
     onPointerDown: (e: React.PointerEvent) => {
       if (e.button !== 0) return;
       e.currentTarget.setPointerCapture(e.pointerId);
@@ -65,9 +90,9 @@ export function ColorPicker() {
     onPointerMove: (e: React.PointerEvent) => {
       const d = dragRef.current;
       if (!d) return;
-      const moved = d.moved || Math.hypot(e.clientX - d.start[0], e.clientY - d.start[1]) > DRAG_SLOP;
+      const moved = d.moved || Math.hypot(e.clientX - d.start[0], e.clientY - d.start[1]) > DRAG_THRESHOLD;
       update({ ...d, at: [e.clientX, e.clientY], moved });
-      if (moved) useStore.getState().setDropTarget(shapeIdAt(e.clientX, e.clientY));
+      if (moved) useStore.getState().setDropTarget(targetAt(e.clientX, e.clientY));
     },
     onPointerUp: (e: React.PointerEvent) => {
       const d = dragRef.current;
@@ -76,9 +101,10 @@ export function ColorPicker() {
       st.setDropTarget(null);
       if (!d) return;
       if (!d.moved) return onClick();
-      const id = shapeIdAt(e.clientX, e.clientY);
+      const id = targetAt(e.clientX, e.clientY);
       if (id) {
-        st.recolor(id, d.color);
+        if (kind === 'line') st.recolor(id, d.color!);
+        else st.refill(id, d.color);
         st.select(id);
       }
       setOpen(false);
@@ -90,37 +116,48 @@ export function ColorPicker() {
   });
 
   return (
-    <div className="color-picker" ref={rootRef}>
+    <div className={`color-picker ${kind}`} ref={rootRef}>
       {open &&
-        PALETTE.map((c, i) => {
-          const a = Math.PI - (i * (Math.PI / 2)) / (PALETTE.length - 1); // 180° → 90°
-          const x = Math.cos(a) * FAN_RADIUS, y = -Math.sin(a) * FAN_RADIUS;
+        options.map((c, i) => {
+          const a = Math.PI - (i * (Math.PI / 2)) / (options.length - 1); // 180° → 90°
+          const r = Math.max(FAN_RADIUS, (FAN_STEP * (options.length - 1)) / (Math.PI / 2));
+          const x = Math.cos(a) * r, y = -Math.sin(a) * r;
+          const key = c.value ? `${kind === 'fill' ? '⇧' : ''}${i + 1}` : kind === 'fill' ? '⇧0' : '';
           return (
             <button
-              key={c.value}
-              className={`fan-swatch ${c.value === shown ? 'active' : ''}`}
-              style={{ '--swatch': c.value, '--x': `${x}px`, '--y': `${y}px`, '--i': i } as React.CSSProperties}
-              title={`${c.name} (${i + 1})`}
-              aria-label={c.name}
+              key={c.name}
+              className={`fan-swatch ${kind} ${c.value ? '' : 'none'} ${c.value === shown ? 'active' : ''}`}
+              style={{ '--swatch': c.value ?? '#fff', '--x': `${x}px`, '--y': `${y}px` } as React.CSSProperties}
+              title={`${label}: ${c.name} (${key})`}
+              aria-label={`${label}: ${c.name}`}
               {...handlers(c.value, () => {
-                useStore.getState().setColor(c.value);
+                apply(c.value);
                 setOpen(false);
               })}
             >
-              <span className="fan-key">{i + 1}</span>
+              <span className="fan-key">{key}</span>
             </button>
           );
         })}
       <button
-        className={`color-current ${open ? 'open' : ''}`}
-        style={{ '--swatch': shown } as React.CSSProperties}
-        title={`${selected ? 'Shape' : 'Drawing'} color: ${shownName}. Click to change, or drag onto a shape`}
-        aria-label={`Color: ${shownName}. Change color`}
+        className={`color-current ${kind} ${shown ? '' : 'none'} ${open ? 'open' : ''}`}
+        style={{ '--swatch': shown ?? '#fff' } as React.CSSProperties}
+        disabled={disabled}
+        title={
+          disabled
+            ? 'Lines have no fill'
+            : `${selected ? 'Shape' : 'New shape'} ${label.toLowerCase()}: ${shownName}. Click to change, or drag onto a shape`
+        }
+        aria-label={`${label}: ${shownName}. Change ${label.toLowerCase()}`}
         aria-expanded={open}
         {...handlers(shown, () => setOpen((o) => !o))}
       />
+      <span className="color-label">{label}</span>
       {drag?.moved && (
-        <div className="color-drag" style={{ left: drag.at[0], top: drag.at[1], background: drag.color }} />
+        <div
+          className={`color-drag ${kind} ${drag.color ? '' : 'none'}`}
+          style={{ left: drag.at[0], top: drag.at[1], '--swatch': drag.color ?? '#fff' } as React.CSSProperties}
+        />
       )}
     </div>
   );

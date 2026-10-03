@@ -2,6 +2,12 @@ import { memo } from 'react';
 import { smoothPath } from '../geometry';
 import type { Shape } from '../types';
 
+/**
+ * Screen pixels of extra grab area on each side of a freehand stroke (Fitts's law: a wider target is
+ * faster to hit). A fixed screen size, so lines stay as easy to grab at any zoom.
+ */
+const GRAB_MARGIN = 14;
+
 interface Props {
   shape: Shape;
   className?: string;
@@ -55,9 +61,10 @@ export const ShapeView = memo(function ShapeView({
               d={d}
               fill="none"
               stroke="transparent"
-              strokeWidth={16}
+              strokeWidth={s.strokeWidth * zoom + 2 * GRAB_MARGIN}
               vectorEffect="non-scaling-stroke"
               strokeLinecap="round"
+              strokeLinejoin="round"
               pointerEvents="stroke"
             />
           )}

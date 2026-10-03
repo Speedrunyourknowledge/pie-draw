@@ -5,7 +5,8 @@ export const DEAD_ZONE = 20; // release inside cancels; no choice until the poin
 export const R_INNER = 26; // visual inner edge of the wedge ring
 export const R_SUB = 104; // crossing this on a submenu wedge enters its outer ring
 export const R_OUTER = 172; // visual outer edge of the submenu ring
-export const CANCEL_RADIUS = R_OUTER + 12; // releasing or clicking beyond the menu cancels
+export const CANCEL_RADIUS_NEAR = R_SUB + 16; // cancel edge just past the main ring, for plain wedges
+export const CANCEL_RADIUS = R_OUTER + 12; // cancel edge past the submenu ring, for submenu wedges
 export const SUB_SPAN = (38 * Math.PI) / 180; // angular width of one submenu wedge
 export const GAP = (1.2 * Math.PI) / 180;
 
@@ -33,6 +34,18 @@ export const itemAngle = (i: number, n: number) => (i * 2 * Math.PI) / n;
 export const subAngle = (parent: number, j: number, m: number) => parent + (j - (m - 1) / 2) * SUB_SPAN;
 
 /**
+ * Where the cancel edge sits for a pointer heading in direction (dx, dy): just outside the
+ * main ring, unless the pointer is in (or over) a submenu, whose outer ring must stay reachable.
+ */
+export function cancelRadius(items: PieItem[], dx: number, dy: number, locked: number | null): number {
+  if (locked !== null) return CANCEL_RADIUS;
+  if (Math.hypot(dx, dy) < DEAD_ZONE) return CANCEL_RADIUS_NEAR; // no direction yet
+  const n = items.length;
+  const index = Math.round(compass(dx, dy) / ((2 * Math.PI) / n)) % n;
+  return items[index].children ? CANCEL_RADIUS : CANCEL_RADIUS_NEAR;
+}
+
+/**
  * Chooses a wedge from the pointer offset (dx, dy) relative to the menu center.
  * Between the dead zone and the menu's edge only the angle matters; a submenu wedge's
  * children live in the ring beyond R_SUB. Inside the dead zone or outside the menu
@@ -40,7 +53,7 @@ export const subAngle = (parent: number, j: number, m: number) => parent + (j - 
  */
 export function pieSelect(items: PieItem[], dx: number, dy: number, prev: PieSelection): PieSelection {
   const r = Math.hypot(dx, dy);
-  if (r < DEAD_ZONE || r > CANCEL_RADIUS) return NO_SELECTION;
+  if (r < DEAD_ZONE || r > cancelRadius(items, dx, dy, prev.locked)) return NO_SELECTION;
   const n = items.length;
   const a = compass(dx, dy);
   const index = Math.round(a / ((2 * Math.PI) / n)) % n;

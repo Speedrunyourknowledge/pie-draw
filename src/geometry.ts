@@ -72,14 +72,26 @@ const base = (type: ShapeType, x: number, y: number) => ({
   rotation: 0,
 });
 
-/** A filled primitive at a default size, centered on (x, y). */
+/** Every shape has a line at this width; closed shapes may also have a fill. */
+export const STROKE_WIDTH = 3;
+export const paint = (color: string, fill: string | null = null) => ({
+  fill,
+  stroke: color,
+  strokeWidth: STROKE_WIDTH,
+});
+
+/** Freehand lines are open, so only closed shapes take a fill. */
+export const canFill = (s: Shape) => s.type !== 'freehand';
+
+/** A primitive at a default size, centered on (x, y). */
 export function makePrimitive(
   type: Exclude<ShapeType, 'freehand'>,
   x: number,
   y: number,
   color: string,
+  fill: string | null,
 ): Shape {
-  const style = { fill: color, stroke: null, strokeWidth: 2 };
+  const style = paint(color, fill);
   switch (type) {
     case 'square':
       return { ...base(type, x, y), ...style, type, w: 120, h: 120 };
@@ -108,9 +120,7 @@ export function makeFreehand(worldPoints: Pt[], color: string): Shape {
   return {
     ...base('freehand', cx, cy),
     type: 'freehand',
-    fill: null,
-    stroke: color,
-    strokeWidth: 3,
+    ...paint(color),
     points: local,
   };
 }

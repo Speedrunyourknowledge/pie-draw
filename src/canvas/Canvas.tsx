@@ -1,39 +1,39 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import simplify from 'simplify-js';
-import { dist, keepsAspect, localBounds, makeFreehand } from '../geometry';
+import { STROKE_WIDTH, dist, keepsAspect, localBounds, makeFreehand, worldBounds } from '../geometry';
 import { PieMenu } from '../interaction/PieMenu';
 import {
   DEAD_ZONE,
   NO_SELECTION,
-  CANCEL_RADIUS,
   pieSelect,
   selectedItem,
   type PieSelection,
 } from '../interaction/pieGeometry';
 import { menuFor, type PieItem } from '../interaction/pieMenuConfig';
-import { GhostTracker, recognize, shapeFromRecognized, type Recognized } from '../interaction/recognize';
-import { useStore } from '../store';
+import { GhostTracker, overshot, recognize, shapeFromRecognized, type Recognized } from '../interaction/recognize';
+import { useStore, type Tool } from '../store';
 import type { Pt, Shape } from '../types';
 import { useKeyboard } from '../useKeyboard';
 import { isMac } from '../platform';
 import { toWorld } from '../view';
 import { GhostPreview } from './GhostPreview';
-import { SelectionHandles, type Corner } from './SelectionHandles';
+import { SELECTION_PAD, SelectionHandles, type Corner } from './SelectionHandles';
 import { ShapeView } from './ShapeView';
 
-const MOVE_SLOP = 4; // px before a press becomes a drag or a stroke
+const MOVE_THRESHOLD = 4; // px before a press becomes a drag or a stroke
 const HOLD_MS = 300; // left press-and-hold opens the menu
 const SAMPLE_PX = 3; // freehand sampling distance
-const RECOGNIZE_EVERY = 3; // run the recognizer every Nth sampled point
 const MIN_SIZE = 6; // smallest on-screen size a shape can be scaled to
+const ERASE_STEP = 4; // px between hit tests along a fast eraser drag, so thin lines aren't skipped
 
 type Gesture =
   | { kind: 'none' }
   | { kind: 'press'; start: Pt; screen: Pt; shapeId: string | null }
   | { kind: 'pan'; last: Pt }
+  | { kind: 'erase'; last: { x: number; y: number }; checkpointed: boolean }
   | { kind: 'drag'; start: Pt; shapeId: string; orig: Pt }
   | { kind: 'scale'; shape: Shape; corner: Corner; moved: boolean }
-  | { kind: 'draw'; points: Pt[]; sinceCheck: number; tracker: GhostTracker }
+  | { kind: 'draw'; points: Pt[]; check: number | null; tracker: GhostTracker } // check: pending frame
   | { kind: 'menu' } // button held while the menu tracks the pointer
   | { kind: 'swallow' }; // ignore the rest of a press that closed a sticky menu
 
@@ -49,6 +49,16 @@ interface MenuState {
 
 function hitShapeId(target: EventTarget | null): string | null {
   return (target as Element | null)?.closest?.('[data-id]')?.getAttribute('data-id') ?? null;
+}
+/** Whether a world point falls inside a shape's selection box (including its padding). */
+function inSelectionBox(s: Shape, w: Pt, zoom: number): boolean {
+  const b = worldBounds(s);
+  const pad = SELECTION_PAD / zoom;
+  return w[0] >= b.minX - pad && w[0] <= b.maxX + pad && w[1] >= b.minY - pad && w[1] <= b.maxY + pad;
+}
+/** The shape under a viewport point, for gestures (the eraser) that hit-test away from e.target. */
+function shapeIdAt(x: number, y: number): string | null {
+  return hitShapeId(document.elementFromPoint(x, y));
 }
 function hitHandle(target: EventTarget | null): Corner | null {
   return ((target as Element | null)?.getAttribute?.('data-handle') as Corner | null) ?? null;
@@ -86,11 +96,11 @@ interface StatusInput {
   mode: string;
   ghost: Recognized | null;
   hasSelection: boolean;
-  handTool: boolean;
+  tool: Tool;
 }
 
 /** One line of context-sensitive guidance, so the available actions are never a mystery. */
-function statusText({ menu, spaceHeld, mode, ghost, hasSelection, handTool }: StatusInput) {
+function statusText({ menu, spaceHeld, mode, ghost, hasSelection, tool }: StatusInput) {
   if (menu?.sticky) return 'Click a wedge · click the center or outside the menu to cancel';
   if (menu && menu.selection.index < 0 && menu.movedOut) return 'Release here to cancel';
   if (menu) return 'Release on a wedge to choose · drag outward into a ring for submenus · release on × or outside to cancel';
@@ -101,8 +111,10 @@ function statusText({ menu, spaceHeld, mode, ghost, hasSelection, handTool }: St
   }
   if (mode === 'scaling') return 'Hold Shift to keep proportions';
   if (mode === 'dragging') return 'Moving · release to drop';
+  if (mode === 'erasing') return 'Erasing · drag across shapes to erase them · release to stop';
   if (spaceHeld) return 'Panning · drag to move around the canvas';
-  if (handTool) return 'Hand tool: drag to pan · press H or Esc to go back to drawing';
+  if (tool === 'hand') return 'Hand tool: drag to pan · press H or Esc to go back to drawing';
+  if (tool === 'eraser') return 'Eraser: click or drag across shapes to erase them · press E or Esc to go back to drawing';
   if (hasSelection) {
     return 'Drag to move · corners or pinch to scale · right-click for more · color swatch at lower right';
   }
@@ -116,7 +128,7 @@ export function Canvas() {
   const currentColor = useStore((s) => s.currentColor);
   const view = useStore((s) => s.view);
   const dropTargetId = useStore((s) => s.dropTargetId);
-  const handTool = useStore((s) => s.handTool);
+  const tool = useStore((s) => s.tool);
 
   const svgRef = useRef<SVGSVGElement>(null);
   const gesture = useRef<Gesture>({ kind: 'none' });
@@ -131,6 +143,7 @@ export function Canvas() {
   const [pulseId, setPulseId] = useState<string | null>(null);
   const [spaceHeld, setSpaceHeld] = useState(false);
   const [panning, setPanning] = useState(false); // middle-button / Space drag in progress
+  const [eraseTargetId, setEraseTargetId] = useState<string | null>(null); // shape under the eraser
 
   const selected = shapes.find((s) => s.id === selectedId) ?? null;
 
@@ -155,7 +168,7 @@ export function Canvas() {
     st.select(shapeId);
     st.setMode('menuOpen');
     menuRef.current = {
-      items: menuFor(shapeId ? 'shape' : 'canvas'),
+      items: menuFor(st.shapes.find((s) => s.id === shapeId) ?? null),
       origin,
       shapeId,
       pointer: origin,
@@ -213,9 +226,8 @@ export function Canvas() {
   const clickSticky = (p: Pt) => {
     trackMenu(p);
     const m = menuRef.current!;
-    const r = dist(p, m.origin);
     const item = selectedItem(m.items, m.selection);
-    if (r < DEAD_ZONE || r > CANCEL_RADIUS) closeMenu();
+    if (m.selection.index < 0) closeMenu(); // on the × or beyond the cancel edge
     else if (item && !item.children) execute(item);
   };
 
@@ -226,11 +238,11 @@ export function Canvas() {
     setStroke(null);
     setGhost(null);
     if (points.length < 2) return;
-    // The full stroke decides; if it no longer matches (e.g. a final overshoot),
-    // the ghost the user was looking at still wins.
-    const result = recognize(points) ?? shown;
+    // What the ghost showed is what you get, unless the stroke ran on too far past its start.
+    // The full stroke only decides when no ghost was up.
+    const result = overshot(points) ? null : (shown ?? recognize(points));
     if (result) {
-      const shape = shapeFromRecognized(result, st.currentColor);
+      const shape = shapeFromRecognized(result, st.currentColor, st.currentFill);
       st.addShape(shape, false);
       pulse(shape.id);
       return;
@@ -239,6 +251,22 @@ export function Canvas() {
       (q) => [q.x, q.y] as Pt,
     );
     st.addShape(makeFreehand(simplified, st.currentColor), false);
+  };
+
+  // ---- eraser ----
+
+  /** Erases the shape under a viewport point; the first erase of a drag records one undo step. */
+  const eraseAt = (x: number, y: number) => {
+    const g = gesture.current;
+    if (g.kind !== 'erase') return;
+    const id = shapeIdAt(x, y);
+    if (!id) return;
+    const st = useStore.getState();
+    if (!g.checkpointed) {
+      st.checkpoint();
+      g.checkpointed = true;
+    }
+    st.eraseShape(id);
   };
 
   // ---- the single pointer-event router ----
@@ -253,7 +281,7 @@ export function Canvas() {
     e.currentTarget.setPointerCapture(e.pointerId);
 
     // Middle button (hold the scroll wheel), Space+drag, or the hand tool pans, like a map.
-    const handPan = (spaceRef.current || st.handTool) && e.button === 0 && !right;
+    const handPan = (spaceRef.current || st.tool === 'hand') && e.button === 0 && !right;
     if (e.button === 1 || (handPan && !menuRef.current)) {
       gesture.current = { kind: 'pan', last: p };
       setPanning(true);
@@ -269,21 +297,33 @@ export function Canvas() {
       }
     }
 
+    // The selected shape owns its whole selection box, so empty space inside the box (between a
+    // stroke's lines, or around a circle) counts as the shape for press, drag, hold, and right-click.
+    const sel = st.shapes.find((s) => s.id === st.selectedId);
+    const shapeId =
+      hitShapeId(e.target) ?? (sel && inSelectionBox(sel, w, st.view.zoom) ? sel.id : null);
+
+    // The eraser removes whole shapes: the one pressed on, then any the drag passes over.
+    if (st.tool === 'eraser' && !right) {
+      gesture.current = { kind: 'erase', last: { x: e.clientX, y: e.clientY }, checkpointed: false };
+      st.setMode('erasing');
+      eraseAt(e.clientX, e.clientY);
+      return;
+    }
+
     if (right) {
-      openMenu(p, hitShapeId(e.target));
+      openMenu(p, shapeId);
       gesture.current = { kind: 'menu' };
       return;
     }
 
     const corner = hitHandle(e.target);
-    const sel = st.shapes.find((s) => s.id === st.selectedId);
     if (corner && sel) {
       gesture.current = { kind: 'scale', shape: sel, corner, moved: false };
       st.setMode('scaling');
       return;
     }
 
-    const shapeId = hitShapeId(e.target);
     st.select(shapeId);
     gesture.current = { kind: 'press', start: w, screen: p, shapeId };
     timer.current = window.setTimeout(() => {
@@ -305,14 +345,24 @@ export function Canvas() {
         st.panBy(p[0] - g.last[0], p[1] - g.last[1]);
         g.last = p;
         return;
+      case 'erase': {
+        setEraseTargetId(null); // it is erased on contact, so only hover shows the outline
+        // Test points along the segment, since pointer events can skip over a thin line.
+        const dx = e.clientX - g.last.x, dy = e.clientY - g.last.y;
+        const n = Math.max(1, Math.ceil(Math.hypot(dx, dy) / ERASE_STEP));
+        for (let i = 1; i <= n; i++) eraseAt(g.last.x + (dx * i) / n, g.last.y + (dy * i) / n);
+        g.last = { x: e.clientX, y: e.clientY };
+        return;
+      }
       case 'none':
         if (menuRef.current?.sticky) trackMenu(p); // click mode follows the hovering pointer
+        else setEraseTargetId(st.tool === 'eraser' && !spaceRef.current ? shapeIdAt(e.clientX, e.clientY) : null);
         return;
       case 'menu':
         trackMenu(p);
         return;
       case 'press': {
-        if (dist(p, g.screen) < MOVE_SLOP) return;
+        if (dist(p, g.screen) < MOVE_THRESHOLD) return;
         clearTimer();
         if (g.shapeId) {
           const s = st.shapes.find((x) => x.id === g.shapeId)!;
@@ -320,7 +370,7 @@ export function Canvas() {
           gesture.current = { kind: 'drag', start: g.start, shapeId: g.shapeId, orig: [s.x, s.y] };
           st.setMode('dragging');
         } else {
-          gesture.current = { kind: 'draw', points: [g.start], sinceCheck: 0, tracker: new GhostTracker() };
+          gesture.current = { kind: 'draw', points: [g.start], check: null, tracker: new GhostTracker() };
           st.setMode('drawing');
         }
         onPointerMove(e);
@@ -344,10 +394,12 @@ export function Canvas() {
       case 'draw': {
         if (dist(w, g.points[g.points.length - 1]) * st.view.zoom < SAMPLE_PX) return;
         g.points.push(w);
-        if (++g.sinceCheck >= RECOGNIZE_EVERY) {
-          g.sinceCheck = 0;
-          setGhost(g.tracker.update(recognize(g.points)));
-        }
+        // Recognize at most once per frame, on the stroke as it is when the frame comes.
+        g.check ??= requestAnimationFrame(() => {
+          g.check = null;
+          if (gesture.current !== g) return; // stroke already finished
+          setGhost(overshot(g.points) ? g.tracker.clear() : g.tracker.update(recognize(g.points)));
+        });
         setStroke(g.points.slice());
         return;
       }
@@ -364,6 +416,7 @@ export function Canvas() {
         if (menuRef.current) releaseMenu();
         return; // mode is managed by the menu
       case 'draw':
+        if (g.check !== null) cancelAnimationFrame(g.check);
         finishStroke(g.points, g.tracker.shown);
         break;
     }
@@ -371,6 +424,8 @@ export function Canvas() {
   };
 
   const onPointerCancel = () => {
+    const g = gesture.current;
+    if (g.kind === 'draw' && g.check !== null) cancelAnimationFrame(g.check);
     gesture.current = { kind: 'none' };
     setStroke(null);
     setGhost(null);
@@ -383,7 +438,7 @@ export function Canvas() {
     useCallback(() => {
       const st = useStore.getState();
       if (menuRef.current) closeMenu();
-      else if (st.handTool) st.setHandTool(false);
+      else if (st.tool !== 'draw') st.setTool('draw');
       else st.select(null);
     }, []),
   );
@@ -454,11 +509,12 @@ export function Canvas() {
     <>
       <svg
         ref={svgRef}
-        className={`canvas mode-${mode} ${spaceHeld || panning ? 'panning' : handTool ? 'hand' : ''}`}
+        className={`canvas mode-${mode} ${spaceHeld || panning ? 'panning' : tool !== 'draw' ? tool : ''}`}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerCancel}
+        onPointerLeave={() => setEraseTargetId(null)}
         onContextMenu={(e) => e.preventDefault()}
       >
         <g transform={`translate(${view.x} ${view.y}) scale(${view.zoom})`}>
@@ -467,7 +523,7 @@ export function Canvas() {
               key={s.id}
               shape={s}
               zoom={view.zoom}
-              className={`shape${s.id === selectedId ? ' selected' : ''}${s.id === dropTargetId ? ' drop-target' : ''}`}
+              className={`shape${s.id === selectedId ? ' selected' : ''}${s.id === dropTargetId ? ' drop-target' : ''}${tool === 'eraser' && s.id === eraseTargetId ? ' erase-target' : ''}`}
               pulse={s.id === pulseId}
             />
           ))}
@@ -476,7 +532,7 @@ export function Canvas() {
             <polyline
               className="live-stroke"
               stroke={currentColor}
-              strokeWidth={3 * view.zoom}
+              strokeWidth={STROKE_WIDTH * view.zoom}
               points={stroke.map((q) => q.join(',')).join(' ')}
             />
           )}
@@ -496,7 +552,7 @@ export function Canvas() {
         </div>
       )}
       <div className="status">
-        {statusText({ menu, spaceHeld: spaceHeld || panning, mode, ghost, hasSelection: !!selected, handTool })}
+        {statusText({ menu, spaceHeld: spaceHeld || panning, mode, ghost, hasSelection: !!selected, tool })}
       </div>
     </>
   );
