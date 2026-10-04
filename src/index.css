@@ -32,7 +32,7 @@ html, body, #root {
 }
 /* An open pie menu floats above the surrounding chrome so no wedge is ever covered. */
 .menu-open .canvas { z-index: 3; }
-.menu-open .topbar, .menu-open .corner, .menu-open .status { opacity: 0.35; }
+.menu-open .topbar, .menu-open .corner { opacity: 0.35; }
 .canvas.panning, .canvas.panning .shape { cursor: grabbing; }
 .canvas.hand, .canvas.hand .shape { cursor: grab; }
 .canvas.hand .shape:hover { filter: none; }
@@ -334,6 +334,7 @@ button { font: inherit; color: inherit; }
   line-height: 1.5;
   user-select: text;
   -webkit-user-select: text;
+  will-change: transform; /* own compositor layer, so scrolling doesn't repaint what's behind it */
 }
 .help-head { display: flex; justify-content: space-between; align-items: center; }
 .help h2 { margin: 0; font-size: 20px; }
@@ -349,6 +350,7 @@ button { font: inherit; color: inherit; }
 .mini-pie svg { width: 210px; height: 210px; display: block; }
 .mini-pie figcaption { font-size: 12px; font-weight: 600; color: var(--muted); }
 .mini-pie .pie { animation: none; }
+.mini-pie .pie-backdrop { filter: none; } /* a live SVG filter flickers inside a scrolling box in Chrome */
 .help-list { margin: 0; padding-left: 18px; }
 .help-list li { margin: 3px 0; }
 .help-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }

@@ -100,9 +100,7 @@ interface StatusInput {
 
 /** One line of context-sensitive guidance, so the available actions are never a mystery. */
 function statusText({ menu, mode, hasSelection, tool }: StatusInput) {
-  if (menu?.sticky) return 'Click a wedge · click the center or outside the menu to cancel';
-  if (menu && menu.selection.index < 0 && menu.movedOut) return 'Release here to cancel';
-  if (menu) return 'Release on a wedge to choose · drag outward into a ring for submenus · release on × or outside to cancel';
+  if (menu) return 'Select an option · Click the center or outside the menu to cancel';
   if (mode === 'scaling') return 'Hold Shift to keep proportions';
   if (tool === 'hand') return 'Drag to pan · Press Esc to exit Pan mode';
   if (tool === 'eraser') return 'Click or drag across shapes to erase them · Press Esc to exit Erase mode';
