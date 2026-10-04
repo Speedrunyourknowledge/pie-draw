@@ -39,7 +39,7 @@ Right-click or press and hold for ~300 ms to open a radial menu centered on the 
 
 ### Color
 
-Two swatches on the right show the line color and fill color. There are five colors available for each. The swatch indicate the color of the selected shape or, with nothing selected, the color new shapes will get. Click a swatch to see the color palette, or **drag a swatch** onto a shape to color it. Additionally, the shape menu has Line / Fill submenus for changing the color of an individual shape.
+Two swatches on the right show the **line color** and **fill color**. There are five colors available for each. The swatch indicate the color of the selected shape or, with nothing selected, the color new shapes will get. Click a swatch to see the color palette, or **drag a swatch** onto a shape to color it. Additionally, the shape menu has Line / Fill submenus for changing the color of an individual shape.
 
 ### Navigation
 
@@ -49,7 +49,7 @@ An infinite canvas with map-style navigation.
 
 ### Files
 
-New, Open, Save and Save As are in the **File** menu at the left of the top bar, next to the document title; it opens on hover (or on click) and lists each command's shortcut. They use native file dialogs. Documents are saved as JSON (`{ "version": 1, "shapes": [...] }`) and validated when opened. New and Open ask before discarding unsaved changes, and the document title indicates unsaved work with a blue dot.
+Saving and opening files can be done through the **File** menu in the toolbar. Documents are saved as JSON (`{ "version": 1, "shapes": [...] }`) and validated when opened. Unsaved work is indicated with a blue dot next to the document title.
 
 ## Design Decisions
 
