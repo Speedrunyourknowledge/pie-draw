@@ -74,7 +74,7 @@ interface AppState {
   redo: () => void;
   newDoc: () => void;
   loadDoc: (shapes: Shape[], handle: FileSystemFileHandle | null, name: string | null) => void;
-  markSaved: (handle: FileSystemFileHandle, name: string) => void;
+  markSaved: (handle: FileSystemFileHandle | null, name: string) => void;
   clearAll: () => void;
   /** Zooms by factor k keeping the screen point `at` fixed. */
   zoomBy: (k: number, at: { x: number; y: number }) => void;
