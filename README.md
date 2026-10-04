@@ -1,6 +1,6 @@
 # Pie Draw
 
-A browser-based 2D **drawing** app. Features a context-aware **pie menu** that opens on right-click or press-and-hold. Shapes and freehand strokes are vector objects that can be selected, moved, scaled and recolored; there is no pixel-level editing.
+A browser-based 2D **drawing** app. Features a context-aware **pie menu** for most actions. Shapes and freehand strokes are vector objects that can be selected, moved, scaled, and recolored; there is no pixel-level editing.
 
 ## Running It
 
@@ -10,40 +10,42 @@ npm run dev
 npm run build     # Production build
 ```
 
-Use **Chrome or Edge** on a desktop (macOS, Windows, Linux or ChromeOS) for the full experience. Open and save use the File System Access API, which only desktop Chromium browsers support; other browsers fall back to downloads (see [Files](#files)).
+Use **Chrome or Edge** on a desktop computer for the full experience.
 
-Press **?** or click **Help** in the app for the full list of gestures and keyboard shortcuts, including drawings of both menu layouts. Shortcuts use Ctrl on Windows/Linux; on a Mac, Cmd and Ctrl both work.
+Click **Help** in the app for a list of possible actions. Keyboard shortcuts use Ctrl on Windows/Linux. On MacOS, Cmd and Ctrl both work.
 
 ## Features
 
 ### Pie Menu
 
-Right-click (two-finger click on a trackpad, Control-click on a Mac) or press and hold for ~300 ms to open a radial menu centered on the pointer.
+Right-click or press and hold for ~300 ms to open a radial menu centered on the pointer.
 
-- **Context-aware.** On empty canvas it offers Square, Rectangle, Circle, Ellipse, Triangle, Line color and Fill color. On a shape it offers Line color, Copy, To Front, Delete, To Back, Cut and Fill. Freehand lines get the same menu without Fill. Opened on a multi-shape selection, every command applies to all selected shapes (Fill appears if any of them can take one).
-- **Fixed layouts.** Each command always sits in the same direction, so choices can be made from memory.
-- **Drag or click.** Drag toward a wedge and release, or do a quick right-click to leave the menu open, then click a wedge. Only the direction matters, not the distance.
-- **Submenus** (Line, Fill) open in an outer ring. Keep dragging outward past the wedge, then sideways to the item, all in one stroke.
-- **Cancel** by releasing on the red **×** in the center, dragging past the menu's faint outer ring (it turns red), or pressing Esc.
+- **Context-aware.** The menu changes based on the target: an empty canvas, an object, or multiple objects.
+- **Fixed layouts.** Each option always sits in the same place, so choices can be made from memory.
+- **Submenus** open in an outer ring. Move the cursor past the wedge, then toward the item, all in one stroke.
+- **Cancel** by releasing on the red X in the center, dragging past the menu's outer ring, or pressing Esc.
 
 ### Drawing and Editing
 
-- **Create primitives** from the empty-canvas menu. The shape appears where the menu was opened, already selected.
-- **Freehand drawing** with live shape recognition. Drag on empty canvas to draw. If the stroke closes into a square, rectangle, circle, ellipse or triangle, a faded **ghost** of that shape appears behind your ink. Release to snap to exactly what the ghost shows; otherwise the stroke stays freehand.
-- **Select, move, scale.** Click a shape to select it, drag to move, drag a corner or edge of the selection box to scale (Shift keeps proportions; squares and circles always do), or pinch on a trackpad. Arrow keys nudge.
-- **Multi-select.** Cmd-click (Ctrl-click on Windows/Linux) or Shift-click shapes to add or remove them one at a time. Shift-drag draws a dashed selection box, and the **select tool** (V, or the button just below the color swatches in the lower right) makes a plain drag on empty space do the same. Every shape the box touches is selected (closed shapes by their area, freehand lines by the line itself); the shapes are outlined while you drag and the group's box appears on release. Holding Shift switches the cursor to the select crosshair. Cmd/Ctrl+A selects all. A multi-selection then acts as one object: dragging anywhere inside its box moves it, right-click or press-and-hold inside opens the menu for the whole group, and its corners and edges scale it (a selection that includes a square or circle keeps its proportions even without Shift). It also recolors, reorders, nudges, copies and deletes as a unit. Individual shapes don't highlight on hover while they're part of the group. In the select tool, Esc first clears the selection, then leaves the tool.
-- **Cut, copy, paste, delete** from the shape menu, the keyboard, or the Paste button in the top bar. Pastes are offset and cascade.
-- **Z-order:** To Front / To Back (a multi-selection keeps its internal stacking order).
-- **Eraser** (E or the lower-right button): click or sweep across shapes to delete whole shapes.
-- **Undo / redo** (100 steps) from the keyboard or top-bar buttons. **Clear all** is undoable.
+- **Create shapes** from the empty-canvas menu. The shape appears where the menu was opened.
+- **Freehand drawing** with live shape recognition. Drag on an empty canvas to draw. If the stroke closes into a recognized shape, a **preview** of that shape appears. Release to snap to that shape.
+- **Object manipulation.** Click an object to select it, drag to move, drag the edge of the selection (or pinch on a trackpad) to scale. Use the arrow keys to translate the object.
+- **Multi-select.** Ctrl-click (Cmd-click on Mac) or Shift-click objects to add or remove them from the selection. Shift-drag or use the **select tool** to create a dashed selection box. A multi-selection acts as one object: moving, scaling, and recoloring affects all selected objects.
+- **Copy and cut** with the menu buttons or Ctrl+C and Ctrl+X.
+- **Paste** with the toolbar button or Ctrl+V.
+- **Z-order.** Use the **To Front** and **To Back** buttons.
+- **Eraser tool.** Click or drag across objects to delete them.
+- **Undo / redo** with the toolbar buttons or Ctrl+Z and Ctrl+Shift+Z.
 
 ### Color
 
-Five colors for lines and fills (or no fill). Two swatches in the lower right show the **Line** color (a ring) and **Fill** (a disc). They reflect the selected shapes (the first one's color if they differ) or, with nothing selected, what new shapes will get. Click a swatch to fan out the palette, or **drag a swatch onto any shape** to paint it (dropping it on a selected shape paints the whole selection). The pie menu's Line / Fill submenus and number keys do the same.
+Two swatches on the right show the line color and fill color. There are five colors available for each. The swatch indicate the color of the selected shape or, with nothing selected, the color new shapes will get. Click a swatch to see the color palette, or **drag a swatch** onto a shape to color it. Additionally, the shape menu has Line / Fill submenus for changing the color of an individual shape.
 
 ### Navigation
 
-An infinite canvas with map-style navigation: middle-drag, Space-drag, the hand tool, or scroll/two-finger swipe to pan; pinch, Ctrl+scroll or the +/− buttons to zoom; F fits all shapes. Pan and zoom aren't part of the document or the undo history.
+An infinite canvas with map-style navigation.
+- **Pan** with middle-click-drag, spacebar-drag, the hand tool, two-finger swipe, or by scrolling.
+- **Zoom** with Ctrl+scroll, the +/− keys, the +/- buttons, or by pinching on a trackpad.
 
 ### Files
 
