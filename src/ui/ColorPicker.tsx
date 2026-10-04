@@ -116,7 +116,8 @@ export function ColorPicker({ kind }: { kind: Kind }) {
   });
 
   return (
-    <div className={`color-picker ${kind}`} ref={rootRef}>
+    // Mouse clicks don't focus the buttons, so a later key press doesn't leave a focus ring behind.
+    <div className={`color-picker ${kind}`} ref={rootRef} onMouseDown={(e) => e.preventDefault()}>
       {open &&
         options.map((c, i) => {
           const a = Math.PI - (i * (Math.PI / 2)) / (options.length - 1); // 180° → 90°

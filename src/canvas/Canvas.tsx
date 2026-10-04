@@ -94,31 +94,22 @@ interface StatusInput {
   menu: MenuState | null;
   spaceHeld: boolean;
   mode: string;
-  ghost: Recognized | null;
   hasSelection: boolean;
   tool: Tool;
 }
 
 /** One line of context-sensitive guidance, so the available actions are never a mystery. */
-function statusText({ menu, spaceHeld, mode, ghost, hasSelection, tool }: StatusInput) {
+function statusText({ menu, mode, hasSelection, tool }: StatusInput) {
   if (menu?.sticky) return 'Click a wedge · click the center or outside the menu to cancel';
   if (menu && menu.selection.index < 0 && menu.movedOut) return 'Release here to cancel';
   if (menu) return 'Release on a wedge to choose · drag outward into a ring for submenus · release on × or outside to cancel';
-  if (mode === 'drawing') {
-    return ghost
-      ? `Release to snap to a ${ghost.type} · keep drawing to keep it freehand`
-      : 'Close the shape to snap it to a primitive · or release to keep it freehand';
-  }
   if (mode === 'scaling') return 'Hold Shift to keep proportions';
-  if (mode === 'dragging') return 'Moving · release to drop';
-  if (mode === 'erasing') return 'Erasing · drag across shapes to erase them · release to stop';
-  if (spaceHeld) return 'Panning · drag to move around the canvas';
-  if (tool === 'hand') return 'Hand tool: drag to pan · press H or Esc to go back to drawing';
-  if (tool === 'eraser') return 'Eraser: click or drag across shapes to erase them · press E or Esc to go back to drawing';
+  if (tool === 'hand') return 'Drag to pan · Press Esc to exit Pan mode';
+  if (tool === 'eraser') return 'Click or drag across shapes to erase them · Press Esc to exit Erase mode';
   if (hasSelection) {
-    return 'Drag to move · corners or pinch to scale · right-click for more · color swatch at lower right';
+    return 'Drag to move · Drag corners to scale · Right-click for more options';
   }
-  return 'Right-click or press-and-hold for the menu · drag to draw · scroll to pan · ? for help';
+  return 'Right-click or press-and-hold for the menu · Drag to draw';
 }
 
 export function Canvas() {
@@ -545,14 +536,22 @@ export function Canvas() {
 
       {shapes.length === 0 && !menu && !stroke && (
         <div className="empty-state">
-          <div className="empty-title">Right-click anywhere to start</div>
+          <div className="empty-title">Right-click or press-and-hold for the menu</div>
           <div className="empty-sub">
-            or press and hold · drag to sketch a shape · press <b className="key">?</b> for help
+            Drag to draw ·
+            <button className="empty-help" onClick={() => useStore.getState().setHelpOpen(true)}>
+              <svg viewBox="0 0 20 20">
+                <circle cx="10" cy="10" r="7.5" />
+                <path d="M7.8 8 a2.3 2.3 0 1 1 3.2 2.1 c-.7.3-1 .8-1 1.5 V12.5" />
+                <circle cx="10" cy="15" r=".6" className="dot" />
+              </svg>
+              Help
+            </button>
           </div>
         </div>
       )}
       <div className="status">
-        {statusText({ menu, spaceHeld: spaceHeld || panning, mode, ghost, hasSelection: !!selected, tool })}
+        {statusText({ menu, spaceHeld: spaceHeld || panning, mode, hasSelection: !!selected, tool })}
       </div>
     </>
   );

@@ -33,6 +33,3 @@ export function kbd(combo: string): string {
     .map((p) => NAMES[p] ?? (p.length === 1 ? p.toUpperCase() : p))
     .join('+');
 }
-
-/** Wording for the secondary mouse button. */
-export const rightClick = isMac ? 'Right-click (two-finger click)' : 'Right-click';

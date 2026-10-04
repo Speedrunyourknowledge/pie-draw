@@ -24,7 +24,8 @@ export function TopBar() {
           {dirty && <span className="dirty" title="Unsaved changes"> •</span>}
         </span>
       </div>
-      <nav className="topbar-actions">
+      {/* Mouse clicks don't focus the buttons, so a later key press doesn't leave a focus ring behind. */}
+      <nav className="topbar-actions" onMouseDown={(e) => e.preventDefault()}>
         <button
           disabled={!canPaste}
           onClick={() => st().paste()}

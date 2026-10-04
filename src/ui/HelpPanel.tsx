@@ -1,7 +1,7 @@
 import { PieMenu } from '../interaction/PieMenu';
 import { NO_SELECTION } from '../interaction/pieGeometry';
 import { CANVAS_MENU, SHAPE_MENU, type PieItem } from '../interaction/pieMenuConfig';
-import { isMac, kbd, rightClick } from '../platform';
+import { isMac, kbd } from '../platform';
 import { useStore } from '../store';
 
 function MiniPie({ items, caption }: { items: PieItem[]; caption: string }) {
@@ -34,7 +34,7 @@ const KEYS: [string, string][] = [
   [kbd('mod+o'), 'Open'],
   [kbd('mod+alt+n'), 'New drawing'],
   ['Esc', 'Close menu, leave hand tool or eraser, deselect'],
-  ['?', 'Show this help'],
+  ['?', 'Show Help menu'],
 ];
 
 export function HelpPanel() {
@@ -46,35 +46,34 @@ export function HelpPanel() {
     <div className="help-backdrop" onPointerDown={close}>
       <div className="help" role="dialog" aria-label="Help" onPointerDown={(e) => e.stopPropagation()}>
         <header className="help-head">
-          <h2>How to use Pie Draw</h2>
+          <h2>How to Use Pie Draw</h2>
           <button className="help-close" onClick={close} aria-label="Close help">
             <svg viewBox="0 0 20 20"><path d="M5 5 L15 15 M15 5 L5 15" /></svg>
           </button>
         </header>
 
         <section>
-          <h3>Everything starts at your pointer</h3>
+          <h3>Menu and Options</h3>
           <p>
-            There is no toolbar. <b>{rightClick}</b> or <b>press and hold</b> anywhere to open a menu
-            right where you are. What it offers depends on what is underneath:
+            <b>Right-click</b> or <b>press-and-hold</b> anywhere to open a menu. 
+            The type of menu depends on what you have selected:
           </p>
           <div className="mini-pies">
-            <MiniPie items={CANVAS_MENU} caption="On empty canvas" />
-            <MiniPie items={SHAPE_MENU} caption="On a shape" />
+            <MiniPie items={CANVAS_MENU} caption="Nothing selected" />
+            <MiniPie items={SHAPE_MENU} caption="Object selected" />
           </div>
           <ul className="help-list">
-            <li><b>Choose</b> by dragging toward a wedge and releasing.</li>
-            <li><b>Submenus</b> (File, Line, Fill): keep dragging outward into the outer ring, then sideways to the item, all in one stroke.</li>
-            <li><b>Cancel</b> by releasing on the red × in the center, <b>or by dragging past the menu's edge</b> and releasing. Esc works too.</li>
-            <li>A quick right-click keeps the menu open, so you can click an item instead.</li>
+            <li><b>Choose</b> an option by clicking it or dragging toward it and releasing.</li>
+            <li><b>Submenus</b> (File, Line, Fill): Move toward the option, then select from the submenu that appears.</li>
+            <li><b>Cancel</b> by selecting the red X in the center, or by moving past the menu's edge. Esc works too.</li>
           </ul>
         </section>
 
         <div className="help-cols">
           <section>
-            <h3>Draw &amp; edit</h3>
+            <h3>Draw and Edit</h3>
             <ul className="help-list">
-              <li><b>Click and drag on empty space</b> to sketch. Close a rough square, circle or triangle and a faded preview shows what it will snap to; release to accept.</li>
+              <li><b>Click and drag on empty space</b> to sketch. Sketch a shape and a faded preview will appear if the shape is recognized.</li>
               <li><b>Click</b> a shape to select it, then <b>drag</b> to move it.</li>
               <li><b>Corner handles</b> scale (Shift keeps proportions), or <b>pinch</b> on a trackpad.</li>
             </ul>
@@ -84,7 +83,7 @@ export function HelpPanel() {
               <li><b>Click one</b> to fan out the colors, then click one. Keys <Key>1</Key>–<Key>5</Key> set the line, <Key>Shift</Key>+<Key>1</Key>–<Key>5</Key> the fill, <Key>Shift</Key>+<Key>0</Key> removes it.</li>
               <li><b>Drag a swatch onto any shape</b> to paint it directly. Freehand lines have a line color only.</li>
             </ul>
-            <h3>Move around</h3>
+            <h3>Move Around</h3>
             <ul className="help-list">
               <li><b>Hold the scroll wheel (middle button) and drag</b> to pan the canvas.</li>
               <li>No scroll wheel? Use the <b>hand tool</b> (lower right, or <Key>H</Key>), or hold <Key>Space</Key> and drag.</li>
@@ -104,10 +103,9 @@ export function HelpPanel() {
                 ))}
               </tbody>
             </table>
-            {isMac && <p className="help-note">On a Mac, Ctrl works the same as Cmd.</p>}
           </section>
         </div>
-        <footer className="help-foot">Press <Key>?</Key> anytime · <Key>Esc</Key> to close</footer>
+        {isMac && <footer className="help-foot">On MacOS, Ctrl works the same as Cmd.</footer>}
       </div>
     </div>
   );

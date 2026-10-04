@@ -162,7 +162,7 @@ html, body, #root {
 /* ---- chrome around the canvas ---- */
 button { font: inherit; color: inherit; }
 .key { font-weight: 700; color: var(--ink); white-space: nowrap; }
-.topbar svg, .nav svg, .help-close svg {
+.topbar svg, .nav svg, .help-close svg, .empty-help svg {
   width: 18px;
   height: 18px;
   fill: none;
@@ -218,7 +218,7 @@ button { font: inherit; color: inherit; }
 .topbar-actions button:hover:not(:disabled) { background: rgba(31, 41, 51, 0.07); }
 .topbar-actions button:disabled { opacity: 0.35; cursor: default; }
 .topbar-actions .help-btn { color: var(--accent); font-weight: 600; }
-.topbar .dot { fill: currentColor; }
+.topbar .dot, .empty-help .dot { fill: currentColor; }
 .sep { width: 1px; height: 20px; margin: 0 6px; background: var(--panel-line); }
 @media (max-width: 640px) {
   .topbar-actions button span { display: none; }
@@ -265,13 +265,13 @@ button { font: inherit; color: inherit; }
   left: 50%;
   transform: translateX(-50%);
   max-width: calc(100vw - 2 * 90px);
-  padding: 7px 14px;
+  padding: 10px 20px;
   border-radius: 999px;
   background: var(--panel);
   border: 1px solid var(--panel-line);
   box-shadow: 0 2px 10px rgba(31, 41, 51, 0.06);
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: 15px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -288,7 +288,28 @@ button { font: inherit; color: inherit; }
   color: var(--muted);
 }
 .empty-title { font-size: 22px; font-weight: 600; color: #9aa1ab; margin-bottom: 8px; }
-.empty-sub { font-size: 14px; color: #a7adb5; }
+.empty-sub {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3em;
+  font-size: 18px;
+  color: #a7adb5;
+}
+.empty-help {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+}
+.empty-help:hover { color: #23419f; }
 
 /* ---- help ---- */
 .help-backdrop {
@@ -308,7 +329,7 @@ button { font: inherit; color: inherit; }
   background: #fff;
   border-radius: 14px;
   box-shadow: 0 20px 60px rgba(31, 41, 51, 0.25);
-  padding: 24px 28px 18px;
+  padding: 24px 28px;
   font-size: 13.5px;
   line-height: 1.5;
   user-select: text;
@@ -323,7 +344,7 @@ button { font: inherit; color: inherit; }
   border: none; border-radius: 6px; background: transparent; cursor: pointer;
 }
 .help-close:hover { background: rgba(31, 41, 51, 0.07); }
-.mini-pies { display: flex; justify-content: center; gap: 40px; flex-wrap: wrap; margin: 6px 0 4px; }
+.mini-pies { display: flex; justify-content: center; gap: 40px; flex-wrap: wrap; margin: 6px 0 16px; }
 .mini-pie { margin: 0; text-align: center; }
 .mini-pie svg { width: 210px; height: 210px; display: block; }
 .mini-pie figcaption { font-size: 12px; font-weight: 600; color: var(--muted); }
@@ -335,7 +356,7 @@ button { font: inherit; color: inherit; }
 .keys { border-collapse: collapse; width: 100%; }
 .keys td { padding: 3px 0; vertical-align: top; }
 .keys td:first-child { padding-right: 12px; white-space: nowrap; }
-.help-foot { margin-top: 16px; text-align: center; color: var(--muted); font-size: 12px; }
+.help-foot { margin-top: 24px; text-align: center; color: var(--muted); font-size: 14px; }
 
 /* ---- color pickers (top of the corner cluster): Fill above Line ---- */
 .color-pickers { display: flex; flex-direction: column; align-items: center; gap: 6px; }
@@ -421,4 +442,3 @@ button { font: inherit; color: inherit; }
   z-index: 20;
 }
 .shape.drop-target { filter: drop-shadow(0 0 4px var(--accent)) drop-shadow(0 0 1px var(--accent)); }
-.help-note { margin-top: 8px !important; font-size: 12px; color: var(--muted); }

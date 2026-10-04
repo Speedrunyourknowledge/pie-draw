@@ -9,7 +9,9 @@ export function NavControls() {
   const setTool = useStore((s) => s.setTool);
   const toggle = (t: Tool) => setTool(tool === t ? 'draw' : t);
   return (
-    <div className="nav" role="toolbar" aria-label="Navigation">
+    // Keep mouse clicks from focusing the buttons; otherwise a later key press (Escape, H, E)
+    // makes the browser show its focus ring on whichever button was last clicked.
+    <div className="nav" role="toolbar" aria-label="Navigation" onMouseDown={(e) => e.preventDefault()}>
       <button
         className={tool === 'hand' ? 'on' : ''}
         onClick={() => toggle('hand')}
