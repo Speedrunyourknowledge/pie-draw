@@ -1,7 +1,8 @@
 import { kbd } from '../platform';
 import { useStore } from '../store';
+import { FileMenu } from './FileMenu';
 
-/** App identity plus a few always-useful commands. Creation and editing stay in the pie menu. */
+/** App identity, the File menu, and a few always-useful commands. Creation and editing stay in the pie menu. */
 export function TopBar() {
   const fileName = useStore((s) => s.fileName);
   const dirty = useStore((s) => s.dirty);
@@ -19,6 +20,7 @@ export function TopBar() {
           <path d="M0 0 L0 -9 A9 9 0 0 1 7.8 -4.5 Z" className="brand-slice" />
         </svg>
         <span className="brand-name">Pie Draw</span>
+        <FileMenu />
         <span className="doc-name">
           {fileName ?? 'Untitled'}
           {dirty && <span className="dirty" title="Unsaved changes"> •</span>}

@@ -16,8 +16,11 @@ interface Drag {
   moved: boolean;
 }
 
+/** The shape under a point; anywhere in a multi-selection's box counts as its first shape. */
 function shapeIdAt(x: number, y: number): string | null {
-  return document.elementFromPoint(x, y)?.closest('[data-id]')?.getAttribute('data-id') ?? null;
+  const top = document.elementFromPoint(x, y);
+  if (top?.hasAttribute('data-group')) return useStore.getState().selectedIds[0] ?? null;
+  return top?.closest('[data-id]')?.getAttribute('data-id') ?? null;
 }
 
 const LINE_OPTIONS: { name: string; value: string | null }[] = [...PALETTE];
@@ -31,7 +34,8 @@ const colorName = (c: string | null) => (c ? (PALETTE.find((p) => p.value === c)
  */
 export function ColorPicker({ kind }: { kind: Kind }) {
   const current = useStore((s) => (kind === 'line' ? s.currentColor : s.currentFill));
-  const selected = useStore((s) => s.shapes.find((x) => x.id === s.selectedId) ?? null);
+  const shapes = useStore((s) => s.shapes);
+  const selectedIds = useStore((s) => s.selectedIds);
   const [open, setOpen] = useState(false);
   const [drag, setDrag] = useState<Drag | null>(null);
   const dragRef = useRef<Drag | null>(null);
@@ -39,11 +43,16 @@ export function ColorPicker({ kind }: { kind: Kind }) {
 
   const options = kind === 'line' ? LINE_OPTIONS : FILL_OPTIONS;
   const label = kind === 'line' ? 'Line' : 'Fill';
-  // Freehand lines are open, so the fill swatch is off while one is selected.
-  const disabled = kind === 'fill' && !!selected && !canFill(selected);
-  // With a shape selected the swatch shows (and edits) that shape's line or fill.
-  const shown = selected && !disabled ? (kind === 'line' ? selected.stroke : selected.fill) : current;
-  const shownName = colorName(shown);
+  // The shapes this swatch shows and edits: the selected ones that have this kind of color.
+  const selected = shapes.filter((x) => selectedIds.includes(x.id));
+  const targets = kind === 'line' ? selected : selected.filter(canFill);
+  // Freehand lines are open, so the fill swatch is off while only lines are selected.
+  const disabled = kind === 'fill' && selected.length > 0 && targets.length === 0;
+  const colorOf = (x: (typeof shapes)[number]) => (kind === 'line' ? x.stroke : x.fill);
+  // With shapes selected the swatch shows their color (the first one's, if they differ).
+  const shown = targets.length > 0 ? colorOf(targets[0]) : current;
+  const mixed = targets.some((x) => colorOf(x) !== shown);
+  const shownName = mixed ? 'Mixed' : colorName(shown);
   const apply = (c: string | null) => {
     const st = useStore.getState();
     if (kind === 'line') st.setColor(c!);
@@ -102,7 +111,9 @@ export function ColorPicker({ kind }: { kind: Kind }) {
       if (!d) return;
       if (!d.moved) return onClick();
       const id = targetAt(e.clientX, e.clientY);
-      if (id) {
+      if (id && st.selectedIds.includes(id)) {
+        apply(d.color); // dropped on the selection: paint all of it
+      } else if (id) {
         if (kind === 'line') st.recolor(id, d.color!);
         else st.refill(id, d.color);
         st.select(id);
@@ -127,7 +138,7 @@ export function ColorPicker({ kind }: { kind: Kind }) {
           return (
             <button
               key={c.name}
-              className={`fan-swatch ${kind} ${c.value ? '' : 'none'} ${c.value === shown ? 'active' : ''}`}
+              className={`fan-swatch ${kind} ${c.value ? '' : 'none'} ${c.value === shown && !mixed ? 'active' : ''}`}
               style={{ '--swatch': c.value ?? '#fff', '--x': `${x}px`, '--y': `${y}px` } as React.CSSProperties}
               title={`${label}: ${c.name} (${key})`}
               aria-label={`${label}: ${c.name}`}
@@ -147,7 +158,7 @@ export function ColorPicker({ kind }: { kind: Kind }) {
         title={
           disabled
             ? 'Lines have no fill'
-            : `${selected ? 'Shape' : 'New shape'} ${label.toLowerCase()}: ${shownName}. Click to change, or drag onto a shape`
+            : `${selected.length > 1 ? 'Selection' : selected.length ? 'Shape' : 'New shape'} ${label.toLowerCase()}: ${shownName}. Click to change, or drag onto a shape`
         }
         aria-label={`${label}: ${shownName}. Change ${label.toLowerCase()}`}
         aria-expanded={open}

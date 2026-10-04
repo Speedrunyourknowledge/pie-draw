@@ -46,6 +46,83 @@ export function worldBounds(s: Shape): Bounds {
   };
 }
 
+/** Bounding box around several shapes on the canvas. */
+export function groupBounds(shapes: Shape[]): Bounds {
+  const bs = shapes.map(worldBounds);
+  return {
+    minX: Math.min(...bs.map((b) => b.minX)),
+    minY: Math.min(...bs.map((b) => b.minY)),
+    maxX: Math.max(...bs.map((b) => b.maxX)),
+    maxY: Math.max(...bs.map((b) => b.maxY)),
+  };
+}
+
+const inRect = ([x, y]: Pt, r: Bounds) => x >= r.minX && x <= r.maxX && y >= r.minY && y <= r.maxY;
+
+/** Whether segment a–b crosses or lies inside rect r (Liang–Barsky clipping). */
+function segmentHitsRect(a: Pt, b: Pt, r: Bounds): boolean {
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  let t0 = 0, t1 = 1;
+  const edges: [number, number][] = [
+    [-dx, a[0] - r.minX],
+    [dx, r.maxX - a[0]],
+    [-dy, a[1] - r.minY],
+    [dy, r.maxY - a[1]],
+  ];
+  for (const [p, q] of edges) {
+    if (p === 0) {
+      if (q < 0) return false;
+    } else {
+      const t = q / p;
+      if (p < 0) t0 = Math.max(t0, t);
+      else t1 = Math.min(t1, t);
+      if (t0 > t1) return false;
+    }
+  }
+  return true;
+}
+
+function pointInPolygon([x, y]: Pt, poly: Pt[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * Whether a shape overlaps a canvas rectangle, for box selection. Closed shapes count by their
+ * area (outline-only ones are selectable by their interior too); freehand lines by the line itself.
+ */
+export function shapeTouchesRect(s: Shape, r: Bounds): boolean {
+  const b = worldBounds(s);
+  if (b.maxX < r.minX || b.minX > r.maxX || b.maxY < r.minY || b.minY > r.maxY) return false;
+  const toWorld = ([x, y]: Pt): Pt => [s.x + x * s.scaleX, s.y + y * s.scaleY];
+  switch (s.type) {
+    case 'square':
+    case 'rectangle':
+      return true; // the bounding box is the shape
+    case 'circle':
+    case 'ellipse': {
+      // The point of r nearest the center, in units of the radii.
+      const rx = s.rx * s.scaleX, ry = s.ry * s.scaleY;
+      const nx = Math.max(r.minX, Math.min(s.x, r.maxX)), ny = Math.max(r.minY, Math.min(s.y, r.maxY));
+      return ((nx - s.x) / rx) ** 2 + ((ny - s.y) / ry) ** 2 <= 1;
+    }
+    case 'triangle': {
+      const pts = s.points.map(toWorld);
+      if (pts.some((p, i) => segmentHitsRect(p, pts[(i + 1) % pts.length], r))) return true;
+      return pointInPolygon([r.minX, r.minY], pts); // the box lies entirely inside the triangle
+    }
+    case 'freehand': {
+      const pts = s.points.map(toWorld);
+      if (pts.length === 1) return inRect(pts[0], r);
+      return pts.some((p, i) => i > 0 && segmentHitsRect(pts[i - 1], p, r));
+    }
+  }
+}
+
 /** Recenters points on their bounding-box center. Returns the center and the local points. */
 export function centerPoints(points: Pt[]): { cx: number; cy: number; local: Pt[] } {
   const b = pointsBounds(points);

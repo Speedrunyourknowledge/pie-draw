@@ -21,10 +21,12 @@ const KEYS: [string, string][] = [
   [kbd('mod+z'), 'Undo'],
   [`${kbd('mod+shift+z')}  or  ${kbd('mod+y')}`, 'Redo'],
   [`${kbd('mod+x')} / ${kbd('mod+c')} / ${kbd('mod+v')}`, 'Cut / copy / paste'],
-  ['Delete', 'Delete selected shape'],
+  ['Delete', 'Delete selected shapes'],
+  [kbd('mod+a'), 'Select all shapes'],
   ['1 – 5', 'Line color (of the selection, or for new shapes)'],
   ['Shift+1 – 5  /  Shift+0', 'Fill color / no fill'],
   ['Arrow keys', 'Nudge selection (with Shift: 10 px), or pan when nothing is selected'],
+  ['V', 'Select tool on / off'],
   ['H', 'Hand tool on / off'],
   ['E', 'Eraser on / off (click or drag across shapes to erase them)'],
   ['+  /  −', 'Zoom in / out'],
@@ -33,7 +35,7 @@ const KEYS: [string, string][] = [
   [`${kbd('mod+s')}  /  ${kbd('mod+shift+s')}`, 'Save / Save as'],
   [kbd('mod+o'), 'Open'],
   [kbd('mod+alt+n'), 'New drawing'],
-  ['Esc', 'Close menu, leave hand tool or eraser, deselect'],
+  ['Esc', 'Close menu, deselect, leave the select, hand or eraser tool'],
   ['?', 'Show Help menu'],
 ];
 
@@ -64,8 +66,10 @@ export function HelpPanel() {
           </div>
           <ul className="help-list">
             <li><b>Choose</b> an option by clicking it or dragging toward it and releasing.</li>
-            <li><b>Submenus</b> (File, Line, Fill): Move toward the option, then select from the submenu that appears.</li>
+            <li><b>Submenus</b> (Line, Fill): Move toward the option, then select from the submenu that appears.</li>
             <li><b>Cancel</b> by selecting the red X in the center, or by moving past the menu's edge. Esc works too.</li>
+            <li>With <b>several shapes selected</b>, the menu acts on all of them.</li>
+            <li><b>New, Open, Save</b> and <b>Save As</b> are in the <b>File</b> menu at the top left.</li>
           </ul>
         </section>
 
@@ -75,7 +79,13 @@ export function HelpPanel() {
             <ul className="help-list">
               <li><b>Click and drag on empty space</b> to sketch. Sketch a shape and a faded preview will appear if the shape is recognized.</li>
               <li><b>Click</b> a shape to select it, then <b>drag</b> to move it.</li>
-              <li><b>Corner handles</b> scale (Shift keeps proportions), or <b>pinch</b> on a trackpad.</li>
+              <li><b>Drag a corner or edge</b> of the selection box to scale (Shift keeps proportions), or <b>pinch</b> on a trackpad.</li>
+            </ul>
+            <h3>Select Several Shapes</h3>
+            <ul className="help-list">
+              <li><b>{kbd('mod')}-click</b> (or <b>Shift-click</b>) shapes to add or remove them one at a time.</li>
+              <li><b>Shift-drag</b> a box, or turn on the <b>select tool</b> (lower right, or <Key>V</Key>) and drag. Every shape the box touches is selected when you let go.</li>
+              <li>The selected shapes then act as one object: <b>drag anywhere inside the box</b> to move them all, <b>right-click or press-and-hold inside it</b> for the menu, and drag its corners or edges to scale them together.</li>
             </ul>
             <h3>Color</h3>
             <ul className="help-list">
@@ -105,7 +115,11 @@ export function HelpPanel() {
             </table>
           </section>
         </div>
-        {isMac && <footer className="help-foot">On MacOS, Ctrl works the same as Cmd.</footer>}
+        {isMac && (
+          <footer className="help-foot">
+            On macOS, Ctrl works the same as Cmd in shortcuts. Ctrl-click is a right-click, so use Cmd-click to add to a selection.
+          </footer>
+        )}
       </div>
     </div>
   );

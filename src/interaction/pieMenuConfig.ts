@@ -1,4 +1,3 @@
-import { newDoc, openDoc, saveDoc } from '../file/fileOps';
 import { canFill, makePrimitive } from '../geometry';
 import { useStore } from '../store';
 import { PALETTE, type Pt, type Shape } from '../types';
@@ -27,7 +26,7 @@ const create =
     ctx.pulse(shape.id);
   };
 
-/** Line color submenu: recolors the shape under the menu, or sets the color for new ones. */
+/** Line color submenu: recolors the selected shapes, or sets the color for new ones. */
 const lineItem = (prefix: string): PieItem => ({
   id: prefix,
   label: 'Line',
@@ -77,17 +76,6 @@ export const CANVAS_MENU: PieItem[] = [
   // Line and Fill set the style of new shapes (nothing is selected on empty canvas).
   lineItem('draw-line'),
   fillItem('draw-fill'),
-  {
-    id: 'file',
-    label: 'File',
-    icon: 'file',
-    children: [
-      { id: 'new', label: 'New', icon: 'new', run: () => newDoc() },
-      { id: 'open', label: 'Open…', icon: 'open', run: () => void openDoc() },
-      { id: 'save', label: 'Save', icon: 'save', run: () => void saveDoc() },
-      { id: 'saveas', label: 'Save As…', icon: 'saveas', run: () => void saveDoc(true) },
-    ],
-  },
 ];
 
 export const SHAPE_MENU: PieItem[] = [
@@ -103,7 +91,8 @@ export const SHAPE_MENU: PieItem[] = [
 /** Freehand lines have nothing to fill, so their menu drops Fill. */
 export const LINE_MENU: PieItem[] = SHAPE_MENU.filter((item) => item.id !== 'fill');
 
-export function menuFor(shape: Shape | null): PieItem[] {
-  if (!shape) return CANVAS_MENU;
-  return canFill(shape) ? SHAPE_MENU : LINE_MENU;
+/** The menu for the selected shapes; Fill appears when any of them can take one. */
+export function menuFor(selected: Shape[]): PieItem[] {
+  if (selected.length === 0) return CANVAS_MENU;
+  return selected.some(canFill) ? SHAPE_MENU : LINE_MENU;
 }

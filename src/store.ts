@@ -1,11 +1,11 @@
 import { create } from 'zustand';
-import { canFill, newId } from './geometry';
+import { canFill, groupBounds, newId } from './geometry';
 import { kbd } from './platform';
 import { PALETTE, type Shape, type TransformPatch } from './types';
 
-export type Mode = 'idle' | 'drawing' | 'dragging' | 'scaling' | 'erasing' | 'menuOpen';
-/** What a plain left-drag does: draw/move (default), pan the view, or erase whole shapes. */
-export type Tool = 'draw' | 'hand' | 'eraser';
+export type Mode = 'idle' | 'drawing' | 'selecting' | 'dragging' | 'scaling' | 'erasing' | 'menuOpen';
+/** What a plain left-drag does: draw/move (default), box-select, pan the view, or erase whole shapes. */
+export type Tool = 'draw' | 'select' | 'hand' | 'eraser';
 
 export interface Toast {
   id: number;
@@ -28,8 +28,8 @@ const HISTORY_LIMIT = 100;
 
 interface AppState {
   shapes: Shape[]; // array order = z-order
-  selectedId: string | null;
-  clipboard: Shape | null;
+  selectedIds: string[];
+  clipboard: Shape[] | null;
   currentColor: string; // line color for new shapes and strokes
   currentFill: string | null; // fill for new closed shapes; null = outline only
   mode: Mode;
@@ -49,19 +49,26 @@ interface AppState {
   addShape: (shape: Shape, select?: boolean) => void;
   /** Live update without a history entry; pair with checkpoint() at gesture start. */
   updateShape: (id: string, patch: TransformPatch) => void;
+  /** Live update of several shapes at once (group move / scale), also without a history entry. */
+  updateShapes: (patches: Map<string, TransformPatch>) => void;
   /** Live removal without a history entry; pair with checkpoint() at gesture start. */
   eraseShape: (id: string) => void;
+  /** Selects just this shape, or nothing. */
   select: (id: string | null) => void;
+  setSelection: (ids: string[]) => void;
+  /** Adds the shape to the selection, or removes it if it is already selected. */
+  toggleSelect: (id: string) => void;
+  selectAll: () => void;
   deleteSelected: () => void;
   copy: () => void;
   cut: () => void;
-  /** Pastes centered at `at`, or offset from the last copy/paste when omitted. */
+  /** Pastes the clipboard centered at `at`, or offset from the last copy/paste when omitted. */
   paste: (at?: { x: number; y: number }) => void;
-  /** Recolors the selected shape's line, or sets the line color for new shapes. */
+  /** Recolors the selected shapes' lines, or sets the line color for new shapes. */
   setColor: (color: string) => void;
   /** Recolors one shape's line and makes it the drawing color. */
   recolor: (id: string, color: string) => void;
-  /** Changes the selected shape's fill, or sets the fill for new shapes. */
+  /** Changes the selected shapes' fill (closed shapes only), or sets the fill for new shapes. */
   setFill: (fill: string | null) => void;
   /** Changes one closed shape's fill and makes it the default fill. */
   refill: (id: string, fill: string | null) => void;
@@ -89,6 +96,9 @@ function cloneShape(s: Shape): Shape {
   return { ...structuredClone(s), id: newId() };
 }
 
+/** Keeps only ids that still exist in `shapes`. */
+const existing = (ids: string[], shapes: Shape[]) => ids.filter((id) => shapes.some((s) => s.id === id));
+
 export const useStore = create<AppState>()((set, get) => {
   /** Applies a document change with an undo entry. */
   const change = (next: Partial<AppState> & { shapes: Shape[] }) =>
@@ -99,14 +109,21 @@ export const useStore = create<AppState>()((set, get) => {
       dirty: true,
     }));
 
+  /** The selected shapes, in z-order. */
   const selected = () => {
-    const { shapes, selectedId } = get();
-    return shapes.find((s) => s.id === selectedId) ?? null;
+    const { shapes, selectedIds } = get();
+    return shapes.filter((s) => selectedIds.includes(s.id));
+  };
+
+  /** Applies `fn` to each selected shape with one undo step. */
+  const changeSelected = (fn: (s: Shape) => Shape) => {
+    const { shapes, selectedIds } = get();
+    change({ shapes: shapes.map((s) => (selectedIds.includes(s.id) ? fn(s) : s)) });
   };
 
   return {
     shapes: [],
-    selectedId: null,
+    selectedIds: [],
     clipboard: null,
     currentColor: PALETTE[0].value,
     currentFill: null,
@@ -128,7 +145,7 @@ export const useStore = create<AppState>()((set, get) => {
     addShape: (shape, select = true) =>
       change({
         shapes: [...get().shapes, shape],
-        selectedId: select ? shape.id : get().selectedId,
+        selectedIds: select ? [shape.id] : get().selectedIds,
       }),
 
     updateShape: (id, patch) =>
@@ -136,29 +153,46 @@ export const useStore = create<AppState>()((set, get) => {
         shapes: st.shapes.map((s) => (s.id === id ? { ...s, ...patch } : s)),
       })),
 
-    select: (id) => set({ selectedId: id }),
+    updateShapes: (patches) =>
+      set((st) => ({
+        shapes: st.shapes.map((s) => {
+          const patch = patches.get(s.id);
+          return patch ? { ...s, ...patch } : s;
+        }),
+      })),
+
+    select: (id) => set({ selectedIds: id ? [id] : [] }),
+
+    setSelection: (selectedIds) => set({ selectedIds }),
+
+    toggleSelect: (id) =>
+      set(({ selectedIds }) => ({
+        selectedIds: selectedIds.includes(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id],
+      })),
+
+    selectAll: () => set(({ shapes }) => ({ selectedIds: shapes.map((s) => s.id) })),
 
     eraseShape: (id) =>
       set((st) => ({
         shapes: st.shapes.filter((s) => s.id !== id),
-        selectedId: st.selectedId === id ? null : st.selectedId,
+        selectedIds: st.selectedIds.filter((x) => x !== id),
       })),
 
     deleteSelected: () => {
-      const { selectedId, shapes } = get();
-      if (!selectedId) return;
-      change({ shapes: shapes.filter((s) => s.id !== selectedId), selectedId: null });
+      const { selectedIds, shapes } = get();
+      if (selectedIds.length === 0) return;
+      change({ shapes: shapes.filter((s) => !selectedIds.includes(s.id)), selectedIds: [] });
     },
 
     copy: () => {
-      const s = selected();
-      if (s) set({ clipboard: structuredClone(s) });
+      const sel = selected();
+      if (sel.length > 0) set({ clipboard: structuredClone(sel) });
     },
 
     cut: () => {
-      const s = selected();
-      if (!s) return;
-      set({ clipboard: structuredClone(s) });
+      const sel = selected();
+      if (sel.length === 0) return;
+      set({ clipboard: structuredClone(sel) });
       get().deleteSelected();
     },
 
@@ -168,23 +202,26 @@ export const useStore = create<AppState>()((set, get) => {
         get().showToast('Clipboard is empty');
         return;
       }
-      const pasted = cloneShape(clipboard);
+      const pasted = clipboard.map(cloneShape);
+      // At a point: center the group's bounding box there. Otherwise: offset from the copy.
+      let dx = PASTE_OFFSET, dy = PASTE_OFFSET;
       if (at) {
-        pasted.x = at.x;
-        pasted.y = at.y;
-      } else {
-        pasted.x += PASTE_OFFSET;
-        pasted.y += PASTE_OFFSET;
+        const b = groupBounds(pasted);
+        dx = at.x - (b.minX + b.maxX) / 2;
+        dy = at.y - (b.minY + b.maxY) / 2;
+      }
+      for (const s of pasted) {
+        s.x += dx;
+        s.y += dy;
       }
       // Next keyboard paste cascades from this one instead of stacking on it.
-      change({ shapes: [...shapes, pasted], selectedId: pasted.id });
+      change({ shapes: [...shapes, ...pasted], selectedIds: pasted.map((s) => s.id) });
       set({ clipboard: structuredClone(pasted) });
     },
 
     setColor: (color) => {
-      const s = selected();
-      if (s) get().recolor(s.id, color);
-      else set({ currentColor: color });
+      set({ currentColor: color });
+      if (selected().some((s) => s.stroke !== color)) changeSelected((s) => ({ ...s, stroke: color }));
     },
 
     recolor: (id, color) => {
@@ -195,9 +232,15 @@ export const useStore = create<AppState>()((set, get) => {
     },
 
     setFill: (fill) => {
-      const s = selected();
-      if (s) get().refill(s.id, fill);
-      else set({ currentFill: fill });
+      const sel = selected();
+      if (sel.length === 0) {
+        set({ currentFill: fill });
+        return;
+      }
+      const fillable = sel.filter(canFill); // open lines have no inside to fill
+      if (fillable.length === 0) return;
+      set({ currentFill: fill });
+      if (fillable.some((s) => s.fill !== fill)) changeSelected((s) => (canFill(s) ? { ...s, fill } : s));
     },
 
     refill: (id, fill) => {
@@ -210,57 +253,57 @@ export const useStore = create<AppState>()((set, get) => {
 
     setDropTarget: (dropTargetId) => set({ dropTargetId }),
 
-    setTool: (tool) => set({ tool, selectedId: tool === 'draw' ? get().selectedId : null }),
+    // Panning and erasing drop the selection; drawing and box-selecting keep it.
+    setTool: (tool) =>
+      set({ tool, selectedIds: tool === 'hand' || tool === 'eraser' ? [] : get().selectedIds }),
 
+    // Both keep the selected shapes' order relative to each other.
     bringToFront: () => {
-      const s = selected();
-      if (!s) return;
-      change({ shapes: [...get().shapes.filter((x) => x.id !== s.id), s] });
+      const sel = selected();
+      if (sel.length === 0) return;
+      change({ shapes: [...get().shapes.filter((x) => !sel.includes(x)), ...sel] });
     },
 
     sendToBack: () => {
-      const s = selected();
-      if (!s) return;
-      change({ shapes: [s, ...get().shapes.filter((x) => x.id !== s.id)] });
+      const sel = selected();
+      if (sel.length === 0) return;
+      change({ shapes: [...sel, ...get().shapes.filter((x) => !sel.includes(x))] });
     },
 
     nudge: (dx, dy) => {
-      const s = selected();
-      if (!s) return;
-      change({
-        shapes: get().shapes.map((x) => (x.id === s.id ? { ...x, x: x.x + dx, y: x.y + dy } : x)),
-      });
+      if (get().selectedIds.length === 0) return;
+      changeSelected((s) => ({ ...s, x: s.x + dx, y: s.y + dy }));
     },
 
     undo: () => {
-      const { past, shapes, future, selectedId } = get();
+      const { past, shapes, future, selectedIds } = get();
       if (past.length === 0) return;
       const prev = past[past.length - 1];
       set({
         shapes: prev,
         past: past.slice(0, -1),
         future: [shapes, ...future],
-        selectedId: prev.some((s) => s.id === selectedId) ? selectedId : null,
+        selectedIds: existing(selectedIds, prev),
         dirty: true,
       });
     },
 
     redo: () => {
-      const { past, shapes, future, selectedId } = get();
+      const { past, shapes, future, selectedIds } = get();
       if (future.length === 0) return;
       const next = future[0];
       set({
         shapes: next,
         past: [...past, shapes],
         future: future.slice(1),
-        selectedId: next.some((s) => s.id === selectedId) ? selectedId : null,
+        selectedIds: existing(selectedIds, next),
         dirty: true,
       });
     },
 
     clearAll: () => {
       if (get().shapes.length === 0) return;
-      change({ shapes: [], selectedId: null });
+      change({ shapes: [], selectedIds: [] });
       get().showToast(`Cleared all shapes · ${kbd('mod+z')} to undo`);
     },
 
@@ -281,7 +324,7 @@ export const useStore = create<AppState>()((set, get) => {
       set({
         view: HOME_VIEW,
         shapes: [],
-        selectedId: null,
+        selectedIds: [],
         past: [],
         future: [],
         fileHandle: null,
@@ -293,7 +336,7 @@ export const useStore = create<AppState>()((set, get) => {
       set({
         view: HOME_VIEW,
         shapes,
-        selectedId: null,
+        selectedIds: [],
         past: [],
         future: [],
         fileHandle: handle,

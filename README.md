@@ -20,25 +20,26 @@ Press **?** or click **Help** in the app for the full list of gestures and keybo
 
 Right-click (two-finger click on a trackpad, Control-click on a Mac) or press and hold for ~300 ms to open a radial menu centered on the pointer.
 
-- **Context-aware.** On empty canvas it offers Square, Rectangle, Circle, Ellipse, Triangle, Line color, Fill color and File (New, Open, Save, Save As). On a shape it offers Line color, Copy, To Front, Delete, To Back, Cut and Fill. Freehand lines get the same menu without Fill.
+- **Context-aware.** On empty canvas it offers Square, Rectangle, Circle, Ellipse, Triangle, Line color and Fill color. On a shape it offers Line color, Copy, To Front, Delete, To Back, Cut and Fill. Freehand lines get the same menu without Fill. Opened on a multi-shape selection, every command applies to all selected shapes (Fill appears if any of them can take one).
 - **Fixed layouts.** Each command always sits in the same direction, so choices can be made from memory.
 - **Drag or click.** Drag toward a wedge and release, or do a quick right-click to leave the menu open, then click a wedge. Only the direction matters, not the distance.
-- **Submenus** (Line, Fill, File) open in an outer ring. Keep dragging outward past the wedge, then sideways to the item, all in one stroke.
+- **Submenus** (Line, Fill) open in an outer ring. Keep dragging outward past the wedge, then sideways to the item, all in one stroke.
 - **Cancel** by releasing on the red **×** in the center, dragging past the menu's faint outer ring (it turns red), or pressing Esc.
 
 ### Drawing and Editing
 
 - **Create primitives** from the empty-canvas menu. The shape appears where the menu was opened, already selected.
 - **Freehand drawing** with live shape recognition. Drag on empty canvas to draw. If the stroke closes into a square, rectangle, circle, ellipse or triangle, a faded **ghost** of that shape appears behind your ink. Release to snap to exactly what the ghost shows; otherwise the stroke stays freehand.
-- **Select, move, scale.** Click a shape to select it, drag to move, drag a corner handle to scale (Shift keeps proportions; squares and circles always do), or pinch on a trackpad. Arrow keys nudge.
+- **Select, move, scale.** Click a shape to select it, drag to move, drag a corner or edge of the selection box to scale (Shift keeps proportions; squares and circles always do), or pinch on a trackpad. Arrow keys nudge.
+- **Multi-select.** Cmd-click (Ctrl-click on Windows/Linux) or Shift-click shapes to add or remove them one at a time. Shift-drag draws a dashed selection box, and the **select tool** (V, or the button just below the color swatches in the lower right) makes a plain drag on empty space do the same. Every shape the box touches is selected (closed shapes by their area, freehand lines by the line itself); the shapes are outlined while you drag and the group's box appears on release. Holding Shift switches the cursor to the select crosshair. Cmd/Ctrl+A selects all. A multi-selection then acts as one object: dragging anywhere inside its box moves it, right-click or press-and-hold inside opens the menu for the whole group, and its corners and edges scale it (a selection that includes a square or circle keeps its proportions even without Shift). It also recolors, reorders, nudges, copies and deletes as a unit. Individual shapes don't highlight on hover while they're part of the group. In the select tool, Esc first clears the selection, then leaves the tool.
 - **Cut, copy, paste, delete** from the shape menu, the keyboard, or the Paste button in the top bar. Pastes are offset and cascade.
-- **Z-order:** To Front / To Back.
+- **Z-order:** To Front / To Back (a multi-selection keeps its internal stacking order).
 - **Eraser** (E or the lower-right button): click or sweep across shapes to delete whole shapes.
 - **Undo / redo** (100 steps) from the keyboard or top-bar buttons. **Clear all** is undoable.
 
 ### Color
 
-Five colors for lines and fills (or no fill). Two swatches in the lower right show the **Line** color (a ring) and **Fill** (a disc). They reflect the selected shape or, with nothing selected, what new shapes will get. Click a swatch to fan out the palette, or **drag a swatch onto any shape** to paint it. The pie menu's Line / Fill submenus and number keys do the same.
+Five colors for lines and fills (or no fill). Two swatches in the lower right show the **Line** color (a ring) and **Fill** (a disc). They reflect the selected shapes (the first one's color if they differ) or, with nothing selected, what new shapes will get. Click a swatch to fan out the palette, or **drag a swatch onto any shape** to paint it (dropping it on a selected shape paints the whole selection). The pie menu's Line / Fill submenus and number keys do the same.
 
 ### Navigation
 
@@ -46,35 +47,39 @@ An infinite canvas with map-style navigation: middle-drag, Space-drag, the hand 
 
 ### Files
 
-New, Open, Save and Save As use native file dialogs. Documents are saved as JSON (`{ "version": 1, "shapes": [...] }`) and validated when opened. New and Open ask before discarding unsaved changes, and the document title indicates unsaved work with a blue dot.
+New, Open, Save and Save As are in the **File** menu at the left of the top bar, next to the document title; it opens on hover (or on click) and lists each command's shortcut. They use native file dialogs. Documents are saved as JSON (`{ "version": 1, "shapes": [...] }`) and validated when opened. New and Open ask before discarding unsaved changes, and the document title indicates unsaved work with a blue dot.
 
 ## Design Decisions
 
-**Pie menu at the pointer instead of a toolbar.** A toolbar at the screen edge makes every command a round trip away from the work, through small targets. The pie menu opens where you already are: every item is the same short distance away, and wedges get wider the farther you move (Fitts' law). The cost is discoverability, which the empty-canvas prompt, status line and help panel make up for.
+**Pie menu at the pointer instead of a toolbar.** A toolbar makes every command a trip to the screen edge. The pie menu opens where you're working, every item is equally close, and wedges widen as you move outward (Fitts' law). The cost is discoverability, which the empty-canvas prompt, status line and help panel offset.
 
-**Direction, not distance, picks the item.** Between the center and the menu's edge only the angle counts, so each wedge is a large target. Beginners drag slowly and read the labels; with practice the same motion becomes a quick flick from memory, so the slow way trains the fast way. This is also why layouts never change. The limit is about eight items per ring, so deeper commands use a submenu ring.
+**Direction, not distance, picks the item.** Only the angle counts, so each wedge is a large target. The slow, label-reading motion is the same one that later becomes a quick flick from memory, which is why layouts never change. About eight items fit per ring, so further commands go in a submenu ring.
 
-**A visible way out.** Many marking menus commit to whatever direction you release in. Here, releasing on the center × or beyond the outer ring cancels, and both light up before you let go. The edge (~120 px, or ~185 px on submenu wedges) is still far larger than any toolbar button.
+**A visible way out.** Releasing on the center × or beyond the outer ring cancels, and both light up before you let go. The edge (~120 px, ~185 px on submenus) is still far larger than a toolbar button.
 
-**Context instead of modes.** The menu shows only what applies to what is under the pointer, so there are no disabled items and no "current tool" to remember. Dragging always means *move* on a shape and *draw* on empty canvas. The trade-off is that the same direction means different things in the two menus (↑ is Square on canvas, Line on a shape). The hand tool and eraser are the only optional modes; each is highlighted, changes the cursor and status line, and exits with its key or Esc.
+**Context instead of modes.** The menu shows only what applies under the pointer, so there are no disabled items. Dragging means *move* on a shape and *draw* on empty canvas. The trade-off is that a direction means different things in the two menus (↑ is Square on canvas, Line on a shape). The select, hand and eraser tools are the only modes; each is highlighted, changes the cursor and status line, and exits with its key or Esc.
 
-**Minimal, clustered chrome.** Nearly the whole window is canvas. A thin top bar holds only document-level commands (Paste, Undo, Redo, Clear all, Help). All other on-screen controls sit in one stack at the lower right, the color swatches above hand / eraser / zoom, with large 48×44 px buttons. Every one also has a keyboard or gesture equivalent.
+**File commands in a conventional menu.** New, Open and Save are used rarely, so they don't earn a pie direction. Moving them to a File menu at the top left, where people expect it, freed a wedge and widened the rest. It opens on hover with a short grace period, or on click for touch and keyboard.
 
-**Color swatches that fan out.** A permanent palette row takes space for a choice made occasionally. Two swatches show the current colors at all times, told apart by shape (ring vs. disc), not just by label. Clicking fans the colors out in an arc that echoes the pie menu, and drag-to-paint lets you recolor a shape without selecting it first.
+**Two ways to box-select.** A plain drag on empty canvas already draws, so box selection uses Shift-drag or the select tool. The box selects anything it *touches*, so a rough drag is enough, and touched shapes are outlined before release. The selected group's box then acts as one target for move, menu and scale. On a Mac, Ctrl-click is a right-click, so Cmd-click adds to the selection.
 
-**Ghost preview for recognition.** Sketch recognizers usually swap your stroke on release, so a wrong guess shows up only after the fact. Here the recognized shape appears as a ghost *behind* your ink while you draw, at the exact size it will snap to, and your ink is never altered mid-stroke. If the guess is wrong you keep drawing. The ghost changes only after several consecutive frames agree, so it doesn't flicker. The recognizer leans conservative: anything ambiguous stays freehand. Because recognition is heuristic, every primitive can also be created reliably from the menu.
+**Minimal, clustered chrome.** A thin top bar holds the document commands (File, Paste, Undo, Redo, Clear all, Help). Everything else sits in one lower-right stack (color swatches, select, hand, eraser, zoom) with large 48×44 px buttons, each with a keyboard or gesture equivalent.
 
-**Feedback and discoverability.** A one-line status bar at the bottom always describes what you can do right now: idle, with a selection, while the menu is open, while scaling, or in hand/eraser mode. An empty canvas shows how to open the menu, and the help panel draws the real menu layouts so directions can be learned before use.
+**Color swatches that fan out.** Two swatches replace a permanent palette and are told apart by shape (ring vs. disc), not just label. Clicking fans the colors out in an arc that echoes the pie menu; dragging a swatch onto a shape recolors it without selecting it first.
 
-**Direct manipulation and safe experimentation.** Shapes are moved and scaled by grabbing them, not through property panels. Undo covers every document change (one drag or pinch = one step), so Clear all and the eraser need no confirmation dialogs.
+**Ghost preview for recognition.** Instead of swapping your stroke on release, the recognized shape appears as a ghost *behind* your ink, at the exact size it will snap to. It changes only after several consecutive frames agree, and ambiguous strokes stay freehand. Every primitive can also be created reliably from the menu.
 
-**Vector objects, one drawing style.** Every stroke is a single selectable path object, like the primitives. All shapes share one line width; closed shapes can also take a fill, and outline-only shapes are still selectable by their interior.
+**Feedback and discoverability.** A status line always says what you can do right now, in every state and tool. An empty canvas shows how to open the menu, and the help panel draws the real menu layouts.
+
+**Direct manipulation and safe experimentation.** Shapes are moved and scaled by grabbing them, not through property panels. Every document change is undoable (one drag or pinch = one step), so Clear all and the eraser need no confirmation dialogs.
+
+**Vector objects, one drawing style.** Every stroke is a selectable path object, like the primitives. All shapes share one line width; closed shapes can take a fill and are selectable by their interior even when outline-only.
 
 ## Not Implemented / Limitations
 
 - **Mobile and touch.** No support for pinch-to-zoom or two-finger pan. Additionally, there is no alternate UI for small screens.
 - **Browsers other than desktop Chrome/Edge.** Can save files, but Save downloads a new copy each time instead of overwriting the original (see [Files](#files)).
-- **Multi-select and grouping.** Only one shape can be selected at a time.
+- **Grouping.** Several shapes can be selected and edited together, but they can't be saved as a permanent group.
 - **Rotation.** Rotation of shapes is not supported.
 - **Drawing capabilities.** One stroke width, a fixed five-color palette, no text boxes, no command to create straight lines.
 - **Erasing.** The eraser removes whole shapes; there is no pixel erasing, by design.

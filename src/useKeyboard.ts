@@ -30,6 +30,7 @@ export function useKeyboard(onEscape: () => void) {
       else if (mod && key === 'x') st.cut();
       else if (mod && key === 'c') st.copy();
       else if (mod && key === 'v') st.paste();
+      else if (mod && key === 'a') st.selectAll();
       else if (mod && key === 's') void saveDoc(e.shiftKey);
       else if (mod && key === 'o') void openDoc();
       // Chrome reserves ⌘N / Ctrl+N for a new window, so New is ⌘⌥N / Ctrl+Alt+N.
@@ -45,6 +46,7 @@ export function useKeyboard(onEscape: () => void) {
       else if (key === '-' || key === '_') zoomOut();
       else if (key === '0') resetZoom();
       else if (key === 'f') fitToContent();
+      else if (key === 'v') st.setTool(st.tool === 'select' ? 'draw' : 'select');
       else if (key === 'h') st.setTool(st.tool === 'hand' ? 'draw' : 'hand');
       else if (key === 'e') st.setTool(st.tool === 'eraser' ? 'draw' : 'eraser');
       // Shift+digit (matched by physical key, since Shift changes e.key) sets the fill; 0 clears it.
@@ -56,7 +58,7 @@ export function useKeyboard(onEscape: () => void) {
         const dx = key === 'arrowleft' ? -1 : key === 'arrowright' ? 1 : 0;
         const dy = key === 'arrowup' ? -1 : key === 'arrowdown' ? 1 : 0;
         // Arrows nudge the selection, or pan the canvas like a map when nothing is selected.
-        if (st.selectedId) st.nudge(dx * (e.shiftKey ? 10 : 1), dy * (e.shiftKey ? 10 : 1));
+        if (st.selectedIds.length > 0) st.nudge(dx * (e.shiftKey ? 10 : 1), dy * (e.shiftKey ? 10 : 1));
         else st.panBy(-dx * PAN_STEP, -dy * PAN_STEP);
       } else handled = false;
 

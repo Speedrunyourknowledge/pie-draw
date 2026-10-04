@@ -31,21 +31,6 @@ const ICONS: Record<string, ReactNode> = {
   circle: <circle r={7.5} />,
   ellipse: <ellipse rx={9.5} ry={6} />,
   triangle: <polygon points="0,-8 8.5,7 -8.5,7" />,
-  file: <path d="M-6 -8 h8 l4 4 v12 h-12z M2 -8 v4 h4" />,
-  new: <path d="M-6 -8 h8 l4 4 v12 h-12z M0 -1 v6 M-3 2 h6" />,
-  open: <path d="M-8 6 v-12 h5 l2 2 h8 v3 M-8 6 l3 -8 h12 l-3 8z" />,
-  save: (
-    <>
-      <path d="M-7 -7 h11 l3 3 v11 h-14z" />
-      <rect x={-4} y={1} width={8} height={6} />
-    </>
-  ),
-  saveas: (
-    <>
-      <path d="M-7 -7 h11 l3 3 v11 h-14z" />
-      <path d="M-3 3 l5 -5 l2 2 l-5 5 h-2z" />
-    </>
-  ),
   line: <circle r={7} className="icon-thick" />,
   fill: <circle r={7.5} className="icon-solid" />,
   copy: (

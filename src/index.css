@@ -35,24 +35,27 @@ html, body, #root {
 .menu-open .topbar, .menu-open .corner { opacity: 0.35; }
 .canvas.panning, .canvas.panning .shape { cursor: grabbing; }
 .canvas.hand, .canvas.hand .shape { cursor: grab; }
-.canvas.hand .shape:hover { filter: none; }
+.canvas.hand .shape:hover .halo { display: none; }
 /* Eraser: an eraser cursor (hotspot at its working edge, lower left), and the shape about to be
    erased gets a red outline. The target is tracked in JS, since :hover sticks to the canvas mid-drag. */
 .canvas.eraser, .canvas.eraser .shape {
   cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='1 1 20 20' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8.2 16.5 L3.6 11.9 a1.4 1.4 0 0 1 0 -2 L10.4 3.1 a1.4 1.4 0 0 1 2 0 L16.9 7.6 a1.4 1.4 0 0 1 0 2 L10 16.5 Z M6.6 8.3 L11.7 13.4' stroke='white' stroke-width='3.6'/%3E%3Cpath d='M8.2 16.5 L3.6 11.9 a1.4 1.4 0 0 1 0 -2 L10.4 3.1 a1.4 1.4 0 0 1 2 0 L16.9 7.6 a1.4 1.4 0 0 1 0 2 L10 16.5 Z M6.6 8.3 L11.7 13.4' fill='white' stroke='%231f2933' stroke-width='1.6'/%3E%3C/svg%3E") 5 15, crosshair;
 }
-.canvas.eraser .shape:hover { filter: none; }
-/* The visible outline turns red (freehand's wide transparent grab path is left alone). */
-.canvas.eraser .shape.erase-target { filter: drop-shadow(0 0 3px rgba(214, 52, 52, 0.3)); }
-.canvas.eraser .shape.erase-target :is([pointer-events='all'], [pointer-events='none']) { stroke: rgba(214, 52, 52, 0.7); }
+.canvas.eraser .shape:hover .halo { display: none; }
+/* The hover halo in red; the shape's own colors are left alone, so it reads even on red shapes.
+   `svg.` outranks the rule above that hides the hover halo. */
+svg.canvas.eraser .shape.erase-target .halo, svg.canvas.eraser .shape.erase-target:hover .halo {
+  display: inline;
+  --halo-color: rgb(214, 52, 52);
+}
 
 /* ---- shapes ---- */
 .shape { cursor: move; }
-.shape:hover {
-  filter: drop-shadow(0 0 1.5px rgba(62, 99, 221, 0.70)) drop-shadow(0 0 4px rgba(62, 99, 221, 0.3));
-}
+/* The hover glow is a halo drawn behind the shape, outside its outline only (see ShapeView). */
+.shape .halo { display: none; }
+.shape:hover .halo { display: inline; }
 .canvas.mode-drawing .shape, .canvas.mode-menuOpen .shape { cursor: inherit; }
-.canvas.mode-drawing .shape:hover, .canvas.mode-menuOpen .shape:hover { filter: none; }
+.canvas.mode-drawing .shape:hover .halo, .canvas.mode-menuOpen .shape:hover .halo { display: none; }
 
 .pulse {
   transform-box: fill-box;
@@ -443,4 +446,87 @@ button { font: inherit; color: inherit; }
   pointer-events: none;
   z-index: 20;
 }
-.shape.drop-target { filter: drop-shadow(0 0 4px var(--accent)) drop-shadow(0 0 1px var(--accent)); }
+/* A stronger version of the hover halo; `svg.` outranks the rules that hide it in other modes. */
+svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo { display: inline; --halo-opacity: 0.8; }
+
+/* ---- multi-select ---- */
+.selection-member {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1;
+  stroke-opacity: 0.45;
+  pointer-events: none;
+}
+.marquee {
+  fill: rgba(62, 99, 221, 0.08);
+  stroke: var(--accent);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+}
+.canvas.select, .canvas.mode-selecting, .canvas.mode-selecting .shape { cursor: crosshair; }
+.nav svg .solid { fill: currentColor; }
+
+/* ---- File menu (top bar) ---- */
+.file-menu {
+  position: relative;
+  padding-left: 6px;
+  border-left: 1px solid var(--panel-line);
+}
+.file-btn {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 32px;
+  padding: 0 6px 0 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.file-btn:hover, .file-btn.open { background: rgba(31, 41, 51, 0.07); }
+.topbar .file-btn .caret { width: 14px; height: 14px; }
+/* The list overlaps the button's bottom edge slightly so the pointer never crosses a gap. */
+.file-list {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 6px;
+  min-width: 220px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  box-shadow: 0 8px 24px rgba(31, 41, 51, 0.14);
+  z-index: 5;
+}
+.file-list::before { content: ''; position: absolute; left: 0; right: 0; top: -8px; height: 8px; }
+.file-list button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.file-list button:hover, .file-list button:focus-visible { background: rgba(62, 99, 221, 0.1); outline: none; }
+.file-list svg { width: 18px; height: 18px; flex: none; stroke-width: 1.5; }
+.file-label { flex: 1; }
+.file-keys { color: var(--muted); font-size: 12px; }
+
+/* A multi-selection's box is one target: it takes the move cursor and covers the members' hover glow. */
+.group-area { fill: transparent; pointer-events: all; cursor: move; }
+.edge { fill: transparent; pointer-events: all; }
+.edge-n, .edge-s { cursor: ns-resize; }
+.edge-e, .edge-w { cursor: ew-resize; }
+.canvas.mode-selecting .shape:hover .halo { display: none; }
+/* Holding Shift (in the draw or select tool) means a drag box-selects, so show the select cursor. */
+.canvas.shift-select, .canvas.shift-select .shape, .canvas.shift-select .group-area { cursor: crosshair; }
+.canvas.shift-select .shape:hover .halo { display: none; }

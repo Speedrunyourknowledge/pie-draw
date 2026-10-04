@@ -2,7 +2,7 @@ import { useStore, type Tool } from '../store';
 import { kbd } from '../platform';
 import { resetZoom, zoomIn, zoomOut } from '../view';
 
-/** Navigation cluster: hand (pan) tool, eraser and zoom, stacked in the lower right. */
+/** Tool and navigation cluster: select, hand (pan) and eraser tools, then zoom, stacked in the lower right. */
 export function NavControls() {
   const zoom = useStore((s) => s.view.zoom);
   const tool = useStore((s) => s.tool);
@@ -11,7 +11,19 @@ export function NavControls() {
   return (
     // Keep mouse clicks from focusing the buttons; otherwise a later key press (Escape, H, E)
     // makes the browser show its focus ring on whichever button was last clicked.
-    <div className="nav" role="toolbar" aria-label="Navigation" onMouseDown={(e) => e.preventDefault()}>
+    <div className="nav" role="toolbar" aria-label="Tools" onMouseDown={(e) => e.preventDefault()}>
+      <button
+        className={tool === 'select' ? 'on' : ''}
+        onClick={() => toggle('select')}
+        aria-pressed={tool === 'select'}
+        title="Select tool: drag a box to select every shape it touches (V). Or Shift-drag"
+        aria-label="Select tool"
+      >
+        <svg viewBox="0 0 20 20">
+          <path d="M3 3 H12 V7 M3 3 V12 H7" strokeDasharray="2 2.2" />
+          <path d="M9.5 9.5 L17 12.3 L13.6 13.6 L12.3 17 Z" className="solid" />
+        </svg>
+      </button>
       <button
         className={tool === 'hand' ? 'on' : ''}
         onClick={() => toggle('hand')}

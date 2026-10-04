@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import simplify from 'simplify-js';
-import { STROKE_WIDTH, dist, keepsAspect, localBounds, makeFreehand, worldBounds } from '../geometry';
+import { STROKE_WIDTH, dist, groupBounds, keepsAspect, makeFreehand, shapeTouchesRect, worldBounds, type Bounds } from '../geometry';
 import { PieMenu } from '../interaction/PieMenu';
 import {
   DEAD_ZONE,
@@ -12,10 +12,10 @@ import {
 import { menuFor, type PieItem } from '../interaction/pieMenuConfig';
 import { GhostTracker, overshot, recognize, shapeFromRecognized, type Recognized } from '../interaction/recognize';
 import { useStore, type Tool } from '../store';
-import type { Pt, Shape } from '../types';
+import type { Pt, Shape, TransformPatch } from '../types';
 import { useKeyboard } from '../useKeyboard';
-import { isMac } from '../platform';
-import { toWorld } from '../view';
+import { isMac, kbd } from '../platform';
+import { toScreen, toWorld } from '../view';
 import { GhostPreview } from './GhostPreview';
 import { SELECTION_PAD, SelectionHandles, type Corner } from './SelectionHandles';
 import { ShapeView } from './ShapeView';
@@ -28,11 +28,13 @@ const ERASE_STEP = 4; // px between hit tests along a fast eraser drag, so thin 
 
 type Gesture =
   | { kind: 'none' }
-  | { kind: 'press'; start: Pt; screen: Pt; shapeId: string | null }
+  // additive: Shift or Cmd/Ctrl held, so a click toggles the shape and a drag adds a box to the selection.
+  | { kind: 'press'; start: Pt; screen: Pt; shapeId: string | null; additive: boolean }
   | { kind: 'pan'; last: Pt }
   | { kind: 'erase'; last: { x: number; y: number }; checkpointed: boolean }
-  | { kind: 'drag'; start: Pt; shapeId: string; orig: Pt }
-  | { kind: 'scale'; shape: Shape; corner: Corner; moved: boolean }
+  | { kind: 'drag'; start: Pt; origs: Map<string, Pt> }
+  | { kind: 'scale'; shapes: Shape[]; corner: Corner; moved: boolean }
+  | { kind: 'marquee'; start: Pt; base: string[] } // box selection; base: selection it adds to
   | { kind: 'draw'; points: Pt[]; check: number | null; tracker: GhostTracker } // check: pending frame
   | { kind: 'menu' } // button held while the menu tracks the pointer
   | { kind: 'swallow' }; // ignore the rest of a press that closed a sticky menu
@@ -60,59 +62,96 @@ function inSelectionBox(s: Shape, w: Pt, zoom: number): boolean {
 function shapeIdAt(x: number, y: number): string | null {
   return hitShapeId(document.elementFromPoint(x, y));
 }
+/** The shape under a viewport point even when the multi-selection's group area covers it. */
+function shapeIdBelow(x: number, y: number): string | null {
+  for (const el of document.elementsFromPoint(x, y)) {
+    const id = el.closest('[data-id]')?.getAttribute('data-id');
+    if (id) return id;
+  }
+  return null;
+}
+const isGroupArea = (target: EventTarget | null) => !!(target as Element | null)?.hasAttribute?.('data-group');
 function hitHandle(target: EventTarget | null): Corner | null {
   return ((target as Element | null)?.getAttribute?.('data-handle') as Corner | null) ?? null;
 }
 
-/** New translate/scale for dragging `corner` of `s0` to `p`, with the opposite corner fixed. */
-function scaleFromCorner(s0: Shape, corner: Corner, p: Pt, lock: boolean) {
-  const b = localBounds(s0);
-  const cx = corner.includes('e') ? b.maxX : b.minX;
-  const ax = corner.includes('e') ? b.minX : b.maxX;
-  const cy = corner.includes('s') ? b.maxY : b.minY;
-  const ay = corner.includes('s') ? b.minY : b.maxY;
-  const Ax = s0.x + ax * s0.scaleX;
-  const Ay = s0.y + ay * s0.scaleY;
-  const w = Math.abs(cx - ax), h = Math.abs(cy - ay);
+/** Scales every shape by (kx, ky) about the canvas point (ax, ay). */
+function scaleAbout(shapes: Shape[], ax: number, ay: number, kx: number, ky: number) {
+  return new Map<string, TransformPatch>(
+    shapes.map((s) => [
+      s.id,
+      { x: ax + (s.x - ax) * kx, y: ay + (s.y - ay) * ky, scaleX: s.scaleX * kx, scaleY: s.scaleY * ky },
+    ]),
+  );
+}
 
-  let sx = w > 1e-6 ? (p[0] - Ax) / (cx - ax) : s0.scaleX;
-  let sy = h > 1e-6 ? (p[1] - Ay) / (cy - ay) : s0.scaleY;
-  const minSx = w > 1e-6 ? MIN_SIZE / w : s0.scaleX;
-  const minSy = h > 1e-6 ? MIN_SIZE / h : s0.scaleY;
+/**
+ * New translate/scale for dragging a corner or edge of the shapes' joint box to `p`, with the opposite
+ * corner or edge fixed. An edge scales one axis, or both evenly (about the edge's middle) when locked.
+ */
+function scaleFromCorner(shapes: Shape[], corner: Corner, p: Pt, lock: boolean) {
+  const b = groupBounds(shapes);
+  const movesX = corner.includes('e') || corner.includes('w');
+  const movesY = corner.includes('n') || corner.includes('s');
+  const cx = corner.includes('e') ? b.maxX : b.minX;
+  const ax = !movesX ? (b.minX + b.maxX) / 2 : corner.includes('e') ? b.minX : b.maxX;
+  const cy = corner.includes('s') ? b.maxY : b.minY;
+  const ay = !movesY ? (b.minY + b.maxY) / 2 : corner.includes('s') ? b.minY : b.maxY;
+  const w = b.maxX - b.minX, h = b.maxY - b.minY;
+
+  let kx = movesX && w > 1e-6 ? (p[0] - ax) / (cx - ax) : 1;
+  let ky = movesY && h > 1e-6 ? (p[1] - ay) / (cy - ay) : 1;
+  const minKx = w > 1e-6 ? MIN_SIZE / w : 1;
+  const minKy = h > 1e-6 ? MIN_SIZE / h : 1;
   if (lock) {
-    const k = Math.max(sx / s0.scaleX, sy / s0.scaleY, minSx / s0.scaleX, minSy / s0.scaleY);
-    sx = s0.scaleX * k;
-    sy = s0.scaleY * k;
+    // Only the axes being dragged decide the factor.
+    const k = Math.max(minKx, minKy, ...(movesX ? [kx] : []), ...(movesY ? [ky] : []));
+    kx = ky = k;
   } else {
-    sx = Math.max(sx, minSx);
-    sy = Math.max(sy, minSy);
+    kx = Math.max(kx, minKx);
+    ky = Math.max(ky, minKy);
   }
-  return { scaleX: sx, scaleY: sy, x: Ax - ax * sx, y: Ay - ay * sy };
+  return scaleAbout(shapes, ax, ay, kx, ky);
+}
+
+/** The box between two canvas points. */
+function boxOf(a: Pt, b: Pt): Bounds {
+  return {
+    minX: Math.min(a[0], b[0]),
+    minY: Math.min(a[1], b[1]),
+    maxX: Math.max(a[0], b[0]),
+    maxY: Math.max(a[1], b[1]),
+  };
 }
 
 interface StatusInput {
   menu: MenuState | null;
   spaceHeld: boolean;
   mode: string;
-  hasSelection: boolean;
+  selectionCount: number;
   tool: Tool;
 }
 
 /** One line of context-sensitive guidance, so the available actions are never a mystery. */
-function statusText({ menu, mode, hasSelection, tool }: StatusInput) {
+function statusText({ menu, mode, selectionCount, tool }: StatusInput) {
   if (menu) return 'Select an option · Click the center or outside the menu to cancel';
   if (mode === 'scaling') return 'Hold Shift to keep proportions';
+  if (mode === 'selecting') return 'Every shape the box touches is selected · Release to finish';
   if (tool === 'hand') return 'Drag to pan · Press Esc to exit Pan mode';
   if (tool === 'eraser') return 'Click or drag across shapes to erase them · Press Esc to exit Erase mode';
-  if (hasSelection) {
-    return 'Drag to move · Drag corners to scale · Right-click for more options';
+  if (tool === 'select') {
+    if (selectionCount > 0) return `Drag empty space to select again · Drag the selection to move · Press Esc to exit Select mode`;
+    return `Drag a box to select shapes · ${kbd('mod')}-click to add or remove · Press Esc to exit Select mode`;
   }
-  return 'Right-click or press-and-hold for the menu · Drag to draw';
+  if (selectionCount > 0) {
+    return `Drag to move · Drag edges or corners to scale · ${kbd('mod')}-click to add or remove · Right-click for more options`;
+  }
+  return 'Right-click or press-and-hold for the menu · Drag to draw · Shift-drag to select';
 }
 
 export function Canvas() {
   const shapes = useStore((s) => s.shapes);
-  const selectedId = useStore((s) => s.selectedId);
+  const selectedIds = useStore((s) => s.selectedIds);
   const mode = useStore((s) => s.mode);
   const currentColor = useStore((s) => s.currentColor);
   const view = useStore((s) => s.view);
@@ -131,10 +170,12 @@ export function Canvas() {
   const [ghost, setGhost] = useState<Recognized | null>(null);
   const [pulseId, setPulseId] = useState<string | null>(null);
   const [spaceHeld, setSpaceHeld] = useState(false);
+  const [shiftHeld, setShiftHeld] = useState(false); // Shift-drag box-selects, so show the select cursor
   const [panning, setPanning] = useState(false); // middle-button / Space drag in progress
   const [eraseTargetId, setEraseTargetId] = useState<string | null>(null); // shape under the eraser
+  const [marquee, setMarquee] = useState<Bounds | null>(null); // box selection in progress, canvas coordinates
 
-  const selected = shapes.find((s) => s.id === selectedId) ?? null;
+  const selected = shapes.filter((s) => selectedIds.includes(s.id));
 
   const toCanvas = (e: { clientX: number; clientY: number }): Pt => {
     const r = svgRef.current!.getBoundingClientRect();
@@ -154,10 +195,12 @@ export function Canvas() {
 
   const openMenu = (origin: Pt, shapeId: string | null) => {
     const st = useStore.getState();
-    st.select(shapeId);
+    // On a shape in the selection the menu acts on the whole selection; otherwise on just that shape.
+    if (!shapeId || !st.selectedIds.includes(shapeId)) st.select(shapeId);
     st.setMode('menuOpen');
+    const { shapes, selectedIds } = useStore.getState();
     menuRef.current = {
-      items: menuFor(st.shapes.find((s) => s.id === shapeId) ?? null),
+      items: menuFor(shapes.filter((s) => selectedIds.includes(s.id))),
       origin,
       shapeId,
       pointer: origin,
@@ -266,6 +309,8 @@ export function Canvas() {
     const w = toWorld(p, st.view); // world space: shapes live here
     // Control-click is the Mac's right-click; on Windows Ctrl+click stays a normal click.
     const right = e.button === 2 || (isMac && e.button === 0 && e.ctrlKey);
+    // Shift, or the platform's shortcut key (Cmd on Mac, Ctrl elsewhere), adds to the selection.
+    const additive = e.shiftKey || (isMac ? e.metaKey : e.ctrlKey);
     if (e.button > 2) return;
     e.currentTarget.setPointerCapture(e.pointerId);
 
@@ -286,11 +331,16 @@ export function Canvas() {
       }
     }
 
-    // The selected shape owns its whole selection box, so empty space inside the box (between a
+    // A selected shape owns its whole selection box, so empty space inside the box (between a
     // stroke's lines, or around a circle) counts as the shape for press, drag, hold, and right-click.
-    const sel = st.shapes.find((s) => s.id === st.selectedId);
-    const shapeId =
-      hitShapeId(e.target) ?? (sel && inSelectionBox(sel, w, st.view.zoom) ? sel.id : null);
+    // A multi-selection's box acts as one object: pressing anywhere inside it presses the group,
+    // except that a modifier-click still reaches the shape underneath to toggle it.
+    const sel = st.shapes.filter((s) => st.selectedIds.includes(s.id));
+    const shapeId = isGroupArea(e.target)
+      ? additive
+        ? shapeIdBelow(e.clientX, e.clientY)
+        : sel[0].id
+      : (hitShapeId(e.target) ?? sel.find((s) => inSelectionBox(s, w, st.view.zoom))?.id ?? null);
 
     // The eraser removes whole shapes: the one pressed on, then any the drag passes over.
     if (st.tool === 'eraser' && !right) {
@@ -307,14 +357,20 @@ export function Canvas() {
     }
 
     const corner = hitHandle(e.target);
-    if (corner && sel) {
-      gesture.current = { kind: 'scale', shape: sel, corner, moved: false };
+    if (corner && sel.length > 0) {
+      gesture.current = { kind: 'scale', shapes: sel, corner, moved: false };
       st.setMode('scaling');
       return;
     }
 
-    st.select(shapeId);
-    gesture.current = { kind: 'press', start: w, screen: p, shapeId };
+    if (additive) {
+      // Nothing changes until release (click toggles) or a drag starts a box.
+      gesture.current = { kind: 'press', start: w, screen: p, shapeId, additive };
+      return;
+    }
+    // Pressing a shape that is already selected keeps the whole selection, so it can be dragged.
+    if (!shapeId || !st.selectedIds.includes(shapeId)) st.select(shapeId);
+    gesture.current = { kind: 'press', start: w, screen: p, shapeId, additive };
     timer.current = window.setTimeout(() => {
       const g = gesture.current;
       if (g.kind !== 'press') return;
@@ -344,6 +400,7 @@ export function Canvas() {
         return;
       }
       case 'none':
+        setShiftHeld(e.shiftKey); // catches Shift pressed while the window was out of focus
         if (menuRef.current?.sticky) trackMenu(p); // click mode follows the hovering pointer
         else setEraseTargetId(st.tool === 'eraser' && !spaceRef.current ? shapeIdAt(e.clientX, e.clientY) : null);
         return;
@@ -353,10 +410,15 @@ export function Canvas() {
       case 'press': {
         if (dist(p, g.screen) < MOVE_THRESHOLD) return;
         clearTimer();
-        if (g.shapeId) {
-          const s = st.shapes.find((x) => x.id === g.shapeId)!;
+        if (g.additive || (!g.shapeId && st.tool === 'select')) {
+          gesture.current = { kind: 'marquee', start: g.start, base: g.additive ? st.selectedIds : [] };
+          st.setMode('selecting');
+        } else if (g.shapeId) {
+          const origs = new Map<string, Pt>(
+            st.shapes.filter((s) => st.selectedIds.includes(s.id)).map((s) => [s.id, [s.x, s.y]]),
+          );
           st.checkpoint();
-          gesture.current = { kind: 'drag', start: g.start, shapeId: g.shapeId, orig: [s.x, s.y] };
+          gesture.current = { kind: 'drag', start: g.start, origs };
           st.setMode('dragging');
         } else {
           gesture.current = { kind: 'draw', points: [g.start], check: null, tracker: new GhostTracker() };
@@ -365,19 +427,26 @@ export function Canvas() {
         onPointerMove(e);
         return;
       }
-      case 'drag':
-        st.updateShape(g.shapeId, {
-          x: g.orig[0] + w[0] - g.start[0],
-          y: g.orig[1] + w[1] - g.start[1],
-        });
+      case 'drag': {
+        const dx = w[0] - g.start[0], dy = w[1] - g.start[1];
+        st.updateShapes(new Map([...g.origs].map(([id, [x, y]]) => [id, { x: x + dx, y: y + dy }])));
         return;
+      }
       case 'scale': {
         if (!g.moved) {
           st.checkpoint();
           g.moved = true;
         }
-        const lock = e.shiftKey || keepsAspect(g.shape);
-        st.updateShape(g.shape.id, scaleFromCorner(g.shape, g.corner, w, lock));
+        // Squares and circles can't stretch, so a selection holding one keeps its proportions.
+        const lock = e.shiftKey || g.shapes.some(keepsAspect);
+        st.updateShapes(scaleFromCorner(g.shapes, g.corner, w, lock));
+        return;
+      }
+      case 'marquee': {
+        const box = boxOf(g.start, w);
+        setMarquee(box);
+        const hits = st.shapes.filter((s) => shapeTouchesRect(s, box)).map((s) => s.id);
+        st.setSelection([...g.base, ...hits.filter((id) => !g.base.includes(id))]);
         return;
       }
       case 'draw': {
@@ -401,6 +470,14 @@ export function Canvas() {
     clearTimer();
     if (g.kind === 'pan') setPanning(false);
     switch (g.kind) {
+      case 'press': {
+        // A click (no drag) with a modifier toggles the shape.
+        if (g.additive && g.shapeId) useStore.getState().toggleSelect(g.shapeId);
+        break;
+      }
+      case 'marquee':
+        setMarquee(null);
+        break;
       case 'menu':
         if (menuRef.current) releaseMenu();
         return; // mode is managed by the menu
@@ -417,6 +494,7 @@ export function Canvas() {
     if (g.kind === 'draw' && g.check !== null) cancelAnimationFrame(g.check);
     gesture.current = { kind: 'none' };
     setStroke(null);
+    setMarquee(null);
     setGhost(null);
     closeMenu();
   };
@@ -427,6 +505,8 @@ export function Canvas() {
     useCallback(() => {
       const st = useStore.getState();
       if (menuRef.current) closeMenu();
+      // In the select tool, the first Esc clears the selection and the next one leaves the tool.
+      else if (st.tool === 'select' && st.selectedIds.length > 0) st.select(null);
       else if (st.tool !== 'draw') st.setTool('draw');
       else st.select(null);
     }, []),
@@ -449,8 +529,8 @@ export function Canvas() {
       // Trackpad pinch arrives as small ctrl+wheel deltas; a Ctrl+mouse-wheel notch is ~100,
       // so clamp it to a comfortable step.
       const delta = Math.max(-25, Math.min(25, e.deltaY));
-      const s = st.shapes.find((x) => x.id === st.selectedId);
-      if (!s) {
+      const sel = st.shapes.filter((x) => st.selectedIds.includes(x.id));
+      if (sel.length === 0) {
         // Nothing selected: pinch zooms the view around the fingers.
         const r = svg.getBoundingClientRect();
         st.zoomBy(Math.exp(-delta * 0.01), { x: e.clientX - r.left, y: e.clientY - r.top });
@@ -458,14 +538,11 @@ export function Canvas() {
       }
       if (e.timeStamp - lastPinch > 400) st.checkpoint(); // one undo step per pinch
       lastPinch = e.timeStamp;
-      const b = localBounds(s);
-      const minK = Math.max(
-        MIN_SIZE / ((b.maxX - b.minX) * s.scaleX || 1),
-        MIN_SIZE / ((b.maxY - b.minY) * s.scaleY || 1),
-      );
+      const b = groupBounds(sel);
+      const minK = Math.max(MIN_SIZE / (b.maxX - b.minX || 1), MIN_SIZE / (b.maxY - b.minY || 1));
       const k = Math.max(Math.exp(-delta * 0.01), minK);
-      // Geometry is centered on (0,0), so scaling about (x, y) scales about the center.
-      st.updateShape(s.id, { scaleX: s.scaleX * k, scaleY: s.scaleY * k });
+      // Scale the selection about its center.
+      st.updateShapes(scaleAbout(sel, (b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2, k, k));
     };
     svg.addEventListener('wheel', onWheel, { passive: false });
     return () => svg.removeEventListener('wheel', onWheel);
@@ -473,6 +550,7 @@ export function Canvas() {
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setShiftHeld(true);
       if (e.code === 'Space' && !e.repeat) {
         spaceRef.current = true;
         setSpaceHeld(true);
@@ -480,16 +558,20 @@ export function Canvas() {
       }
     };
     const up = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setShiftHeld(false);
       if (e.code === 'Space') {
         spaceRef.current = false;
         setSpaceHeld(false);
       }
     };
+    const blur = () => setShiftHeld(false);
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
+    window.addEventListener('blur', blur);
     return () => {
       window.removeEventListener('keydown', down);
       window.removeEventListener('keyup', up);
+      window.removeEventListener('blur', blur);
       clearTimer();
     };
   }, []);
@@ -498,7 +580,7 @@ export function Canvas() {
     <>
       <svg
         ref={svgRef}
-        className={`canvas mode-${mode} ${spaceHeld || panning ? 'panning' : tool !== 'draw' ? tool : ''}`}
+        className={`canvas mode-${mode} ${spaceHeld || panning ? 'panning' : tool !== 'draw' ? tool : ''}${shiftHeld && (tool === 'draw' || tool === 'select') ? ' shift-select' : ''}`}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -512,7 +594,7 @@ export function Canvas() {
               key={s.id}
               shape={s}
               zoom={view.zoom}
-              className={`shape${s.id === selectedId ? ' selected' : ''}${s.id === dropTargetId ? ' drop-target' : ''}${tool === 'eraser' && s.id === eraseTargetId ? ' erase-target' : ''}`}
+              className={`shape${selectedIds.includes(s.id) ? ' selected' : ''}${s.id === dropTargetId ? ' drop-target' : ''}${tool === 'eraser' && s.id === eraseTargetId ? ' erase-target' : ''}`}
               pulse={s.id === pulseId}
             />
           ))}
@@ -526,7 +608,15 @@ export function Canvas() {
             />
           )}
         </g>
-        {selected && mode !== 'drawing' && <SelectionHandles shape={selected} view={view} />}
+        {/* While a box is being dragged, only outline what it touches; the group box comes on release. */}
+        {selected.length > 0 && mode !== 'drawing' && (
+          <SelectionHandles shapes={selected} view={view} preview={mode === 'selecting'} />
+        )}
+        {marquee && (() => {
+          const [x0, y0] = toScreen([marquee.minX, marquee.minY], view);
+          const [x1, y1] = toScreen([marquee.maxX, marquee.maxY], view);
+          return <rect className="marquee" x={x0} y={y0} width={x1 - x0} height={y1 - y0} />;
+        })()}
         {menu && (
           <PieMenu items={menu.items} origin={menu.origin} pointer={menu.pointer} selection={menu.selection} />
         )}
@@ -549,7 +639,7 @@ export function Canvas() {
         </div>
       )}
       <div className="status">
-        {statusText({ menu, spaceHeld: spaceHeld || panning, mode, hasSelection: !!selected, tool })}
+        {statusText({ menu, spaceHeld: spaceHeld || panning, mode, selectionCount: selected.length, tool })}
       </div>
     </>
   );
