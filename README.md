@@ -1,6 +1,6 @@
 # Pie Draw
 
-A browser-based 2D **drawing** app. Features a context-aware **pie menu** for most actions. Shapes and freehand strokes are vector objects that can be selected, moved, scaled, and recolored; there is no pixel-level editing.
+A browser-based 2D **drawing** app. Features a context-aware **pie menu** for most actions. Shapes and freehand strokes are vector objects that can be selected, moved, scaled, and recolored. There is no pixel-level editing.
 
 ## Running It
 
@@ -77,13 +77,12 @@ Saving and opening files can be done through the **File** menu in the toolbar. D
 
 **Vector objects, one drawing style.** Every stroke is a selectable path object, like the primitives. All shapes share one line width; closed shapes can take a fill and are selectable by their interior even when outline-only.
 
-## Not Implemented / Limitations
+## Limitations / Not Yet Implemented
 
 - **Mobile and touch.** No support for pinch-to-zoom or two-finger pan. Additionally, there is no alternate UI for small screens.
-- **Browsers other than desktop Chrome/Edge.** Can save files, but Save downloads a new copy each time instead of overwriting the original (see [Files](#files)).
-- **Grouping.** Several shapes can be selected and edited together, but they can't be saved as a permanent group.
+- **Browsers other than desktop Chrome/Edge.** Can save files, but Save downloads a new copy each time instead of overwriting the original.
+- **Pie menu accessibility.** Menu options can't be navigated with arrow keys.
 - **Rotation.** Rotation of shapes is not supported.
-- **Drawing capabilities.** One stroke width, a fixed five-color palette, no text boxes, no command to create straight lines.
-- **Erasing.** The eraser removes whole shapes; there is no pixel erasing, by design.
-- **Export and persistence.** No PNG/SVG export, no autosave (refreshing the page loses unsaved work).
-- **Pie menu accessibility.** Menu commands can't be navigated with arrow keys.
+- **Drawing capabilities.** One stroke width, a fixed five-color palette, no command to create straight lines.
+- **Erasing.** There is no pixel-level erasing, by design.
+- **Export and persistence.** No PNG/SVG export, no autosave.
