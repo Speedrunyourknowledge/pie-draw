@@ -96,3 +96,12 @@ export function menuFor(selected: Shape[]): PieItem[] {
   if (selected.length === 0) return CANVAS_MENU;
   return selected.some(canFill) ? SHAPE_MENU : LINE_MENU;
 }
+
+/**
+ * The menu layouts shown as pictures. The help panel draws these live, and
+ * `npm run docs:pies` renders the same ones to SVG files for the README, so they can't drift apart.
+ */
+export const MENU_PREVIEWS: { id: string; items: PieItem[]; caption: string }[] = [
+  { id: 'canvas', items: CANVAS_MENU, caption: 'Nothing selected' },
+  { id: 'shape', items: SHAPE_MENU, caption: 'Object selected' },
+];

@@ -5,7 +5,10 @@ import { PieMenu } from '../interaction/PieMenu';
 import {
   DEAD_ZONE,
   NO_SELECTION,
+  R_SUB,
+  cancelRadius,
   pieSelect,
+  pieStep,
   selectedItem,
   type PieSelection,
 } from '../interaction/pieGeometry';
@@ -21,7 +24,7 @@ import { SELECTION_PAD, SelectionHandles, type Corner } from './SelectionHandles
 import { ShapeView } from './ShapeView';
 
 const MOVE_THRESHOLD = 4; // px before a press becomes a drag or a stroke
-const HOLD_MS = 300; // left press-and-hold opens the menu
+const HOLD_MS = 300; // left-press-and-hold opens the menu
 const SAMPLE_PX = 3; // freehand sampling distance
 const MIN_SIZE = 6; // smallest on-screen size a shape can be scaled to
 const ERASE_STEP = 4; // px between hit tests along a fast eraser drag, so thin lines aren't skipped
@@ -30,6 +33,8 @@ type Gesture =
   | { kind: 'none' }
   // additive: Shift or Cmd/Ctrl held, so a click toggles the shape and a drag adds a box to the selection.
   | { kind: 'press'; start: Pt; screen: Pt; shapeId: string | null; additive: boolean }
+  // In the hand or eraser tool: a drag pans or erases, a hold opens the menu, a click erases.
+  | { kind: 'toolPress'; tool: 'hand' | 'eraser'; screen: Pt; client: { x: number; y: number } }
   | { kind: 'pan'; last: Pt }
   | { kind: 'erase'; last: { x: number; y: number }; checkpointed: boolean }
   | { kind: 'drag'; start: Pt; origs: Map<string, Pt> }
@@ -146,7 +151,7 @@ function statusText({ menu, mode, selectionCount, tool }: StatusInput) {
   if (selectionCount > 0) {
     return `Drag to move · Drag edges or corners to scale · ${kbd('mod')}-click to add or remove · Right-click for more options`;
   }
-  return 'Right-click or press-and-hold for the menu · Drag to draw · Shift-drag to select';
+  return 'Right-click or left-press-and-hold for the menu · Drag to draw · Shift-drag to select';
 }
 
 export function Canvas() {
@@ -163,6 +168,7 @@ export function Canvas() {
   const menuRef = useRef<MenuState | null>(null);
   const timer = useRef<number | undefined>(undefined);
   const spaceRef = useRef(false); // Space held: drag pans the view
+  const hoverRef = useRef<Pt | null>(null); // last pointer position over the canvas, where M opens the menu
 
   // Render mirrors of the refs above (the refs are the source of truth inside handlers).
   const [menu, setMenu] = useState<MenuState | null>(null);
@@ -226,11 +232,35 @@ export function Canvas() {
     renderMenu();
   };
 
+  /** Whether the pointer is on the menu's wedges or its center ×, i.e. inside the cancel edge. */
+  const overMenu = (m: MenuState) => {
+    const dx = m.pointer[0] - m.origin[0], dy = m.pointer[1] - m.origin[1];
+    return Math.hypot(dx, dy) <= cancelRadius(m.items, dx, dy, m.selection.locked);
+  };
+
   const execute = (item: PieItem) => {
     const m = menuRef.current!;
     const origin = toWorld(m.origin, useStore.getState().view); // shapes live in world space
     closeMenu();
     item.run?.({ origin, shapeId: m.shapeId, pulse });
+  };
+
+  /**
+   * M opens the menu from the keyboard: on the selection's center, else at the pointer (where new
+   * shapes go), else mid-screen. It opens in click mode, kept far enough from the edges to fit.
+   */
+  const openMenuFromKeyboard = () => {
+    const { shapes, selectedIds, view } = useStore.getState();
+    const sel = shapes.filter((s) => selectedIds.includes(s.id));
+    let origin: Pt = hoverRef.current ?? [window.innerWidth / 2, window.innerHeight / 2];
+    if (sel.length > 0) {
+      const b = groupBounds(sel);
+      origin = toScreen([(b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2], view);
+    }
+    const r = svgRef.current!.getBoundingClientRect();
+    const fit = (v: number, size: number) => Math.min(Math.max(v, R_SUB + 8), size - R_SUB - 8);
+    openMenu([fit(origin[0], r.width), fit(origin[1], r.height)], sel[0]?.id ?? null);
+    makeSticky();
   };
 
   const makeSticky = () => {
@@ -314,9 +344,10 @@ export function Canvas() {
     if (e.button > 2) return;
     e.currentTarget.setPointerCapture(e.pointerId);
 
-    // Middle button (hold the scroll wheel), Space+drag, or the hand tool pans, like a map.
-    const handPan = (spaceRef.current || st.tool === 'hand') && e.button === 0 && !right;
-    if (e.button === 1 || (handPan && !menuRef.current)) {
+    // Middle button (hold the scroll wheel) or Space+drag pans, like a map. The hand tool does too,
+    // once the press moves (see toolPress), so a hold can still open the menu.
+    const spacePan = spaceRef.current && e.button === 0 && !right;
+    if (e.button === 1 || (spacePan && !menuRef.current)) {
       gesture.current = { kind: 'pan', last: p };
       setPanning(true);
       return;
@@ -342,11 +373,10 @@ export function Canvas() {
         : sel[0].id
       : (hitShapeId(e.target) ?? sel.find((s) => inSelectionBox(s, w, st.view.zoom))?.id ?? null);
 
-    // The eraser removes whole shapes: the one pressed on, then any the drag passes over.
-    if (st.tool === 'eraser' && !right) {
-      gesture.current = { kind: 'erase', last: { x: e.clientX, y: e.clientY }, checkpointed: false };
-      st.setMode('erasing');
-      eraseAt(e.clientX, e.clientY);
+    // The hand and eraser tools wait to see whether the press is a drag, a click or a hold.
+    if ((st.tool === 'hand' || st.tool === 'eraser') && !right) {
+      gesture.current = { kind: 'toolPress', tool: st.tool, screen: p, client: { x: e.clientX, y: e.clientY } };
+      startHold(p, shapeId);
       return;
     }
 
@@ -371,12 +401,24 @@ export function Canvas() {
     // Pressing a shape that is already selected keeps the whole selection, so it can be dragged.
     if (!shapeId || !st.selectedIds.includes(shapeId)) st.select(shapeId);
     gesture.current = { kind: 'press', start: w, screen: p, shapeId, additive };
+    startHold(p, shapeId);
+  };
+
+  /** Left-press-and-hold without moving opens the menu, whatever the tool. */
+  const startHold = (screen: Pt, shapeId: string | null) => {
+    const g = gesture.current;
     timer.current = window.setTimeout(() => {
-      const g = gesture.current;
-      if (g.kind !== 'press') return;
-      openMenu(g.screen, g.shapeId);
+      if (gesture.current !== g) return; // the press already became something else
+      openMenu(screen, shapeId);
       gesture.current = { kind: 'menu' };
     }, HOLD_MS);
+  };
+
+  /** The eraser removes whole shapes: the one pressed on, then any the drag passes over. */
+  const startErase = (x: number, y: number) => {
+    gesture.current = { kind: 'erase', last: { x, y }, checkpointed: false };
+    useStore.getState().setMode('erasing');
+    eraseAt(x, y);
   };
 
   const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
@@ -384,6 +426,7 @@ export function Canvas() {
     const st = useStore.getState();
     const p = toCanvas(e);
     const w = toWorld(p, st.view);
+    hoverRef.current = p;
 
     switch (g.kind) {
       case 'pan':
@@ -406,6 +449,16 @@ export function Canvas() {
         return;
       case 'menu':
         trackMenu(p);
+        return;
+      case 'toolPress':
+        if (dist(p, g.screen) < MOVE_THRESHOLD) return;
+        clearTimer();
+        if (g.tool === 'eraser') startErase(g.client.x, g.client.y);
+        else {
+          gesture.current = { kind: 'pan', last: g.screen };
+          setPanning(true);
+        }
+        onPointerMove(e);
         return;
       case 'press': {
         if (dist(p, g.screen) < MOVE_THRESHOLD) return;
@@ -475,6 +528,12 @@ export function Canvas() {
         if (g.additive && g.shapeId) useStore.getState().toggleSelect(g.shapeId);
         break;
       }
+      case 'toolPress':
+        if (g.tool === 'eraser') {
+          startErase(g.client.x, g.client.y); // a click erases the shape under it
+          gesture.current = { kind: 'none' };
+        }
+        break;
       case 'marquee':
         setMarquee(null);
         break;
@@ -509,6 +568,33 @@ export function Canvas() {
       else if (st.tool === 'select' && st.selectedIds.length > 0) st.select(null);
       else if (st.tool !== 'draw') st.setTool('draw');
       else st.select(null);
+    }, []),
+    // M opens and closes the menu; an open menu takes the arrow keys and Enter (see pieStep).
+    useCallback((e: KeyboardEvent) => {
+      const m = menuRef.current;
+      if (e.metaKey || e.ctrlKey || e.altKey) return false;
+      if (e.key.toLowerCase() === 'm' && !e.repeat) {
+        if (m) closeMenu();
+        else if (gesture.current.kind === 'none') openMenuFromKeyboard();
+        return true;
+      }
+      if (!m) return false;
+      if (e.key === 'Enter') {
+        const item = selectedItem(m.items, m.selection);
+        if (item?.children) m.selection = pieStep(m.items, m.selection, 'ArrowUp')!;
+        else if (item) {
+          execute(item);
+          return true;
+        }
+        renderMenu();
+        return true;
+      }
+      const next = pieStep(m.items, m.selection, e.key);
+      if (!next) return false;
+      m.selection = next;
+      renderMenu();
+      return true;
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- execute only uses refs and the stable pulse
     }, []),
   );
 
@@ -580,12 +666,15 @@ export function Canvas() {
     <>
       <svg
         ref={svgRef}
-        className={`canvas mode-${mode} ${spaceHeld || panning ? 'panning' : tool !== 'draw' ? tool : ''}${shiftHeld && (tool === 'draw' || tool === 'select') ? ' shift-select' : ''}`}
+        className={`canvas mode-${mode} ${spaceHeld || panning ? 'panning' : tool !== 'draw' ? tool : ''}${shiftHeld && (tool === 'draw' || tool === 'select') ? ' shift-select' : ''}${menu && overMenu(menu) ? ' over-menu' : ''}`}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerCancel}
-        onPointerLeave={() => setEraseTargetId(null)}
+        onPointerLeave={() => {
+          setEraseTargetId(null);
+          hoverRef.current = null;
+        }}
         onContextMenu={(e) => e.preventDefault()}
       >
         <g transform={`translate(${view.x} ${view.y}) scale(${view.zoom})`}>
@@ -624,7 +713,7 @@ export function Canvas() {
 
       {shapes.length === 0 && !menu && !stroke && (
         <div className="empty-state">
-          <div className="empty-title">Right-click or press-and-hold for the menu</div>
+          <div className="empty-title">Right-click or left-press-and-hold for the menu</div>
           <div className="empty-sub">
             Drag to draw ·
             <button className="empty-help" onClick={() => useStore.getState().setHelpOpen(true)}>

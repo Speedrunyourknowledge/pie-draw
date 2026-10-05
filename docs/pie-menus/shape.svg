@@ -1,0 +1,59 @@
+<svg width="210" height="210" xmlns="http://www.w3.org/2000/svg" viewBox="-112 -112 224 224"><style>:root {
+  --bg: #ffffff;
+  --cancel: #e5484d;
+  --muted: #6b7280;
+  --ink: #1f2933;
+  --accent: #3e63dd;
+  --panel: #ffffff;
+  --panel-line: rgba(31, 41, 51, 0.12);
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: var(--ink);
+}
+/* ---- pie menu ---- */
+.pie { pointer-events: none; animation: pie-in 110ms ease-out; transform-box: view-box; }
+@keyframes pie-in { from { opacity: 0; } to { opacity: 1; } }
+.pie-edge { fill: none; stroke: rgba(31, 41, 51, 0.12); stroke-width: 1; stroke-dasharray: 3 5; }
+.pie-edge.outside { stroke: var(--cancel); stroke-opacity: 0.55; stroke-dasharray: none; }
+.pie-backdrop { fill: none; filter: drop-shadow(0 6px 18px rgba(31, 41, 51, 0.18)); }
+.pie-slice {
+  fill: var(--panel);
+  stroke: var(--panel-line);
+  stroke-width: 1;
+  transition: fill 80ms;
+}
+.pie-wedge.active .pie-slice { fill: var(--accent); stroke: var(--accent); }
+.pie-face { color: var(--ink); }
+.pie-wedge.active .pie-face { color: #fff; }
+.pie-icon * {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.pie-icon .icon-solid { fill: currentColor; }
+.pie-icon .icon-dim { stroke-dasharray: 2 2; }
+.pie-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-anchor: middle;
+  fill: currentColor;
+}
+.pie-swatch { stroke: rgba(255, 255, 255, 0.9); stroke-width: 2; }
+.pie-swatch-line { fill: #fff; stroke-width: 4.5; }
+.pie-swatch-none circle { fill: #fff; stroke: rgba(31, 41, 51, 0.25); stroke-width: 1; }
+.pie-swatch-none path { stroke: var(--cancel); stroke-width: 2; stroke-linecap: round; }
+.pie-icon .icon-thick { stroke-width: 3.2; }
+.pie-more { fill: none; stroke: currentColor; stroke-width: 1.5; color: var(--ink); opacity: 0.5; }
+.pie-wedge.active .pie-more { color: #fff; opacity: 0.9; }
+.pie-sub.preview { opacity: 0.55; }
+.pie-sub { animation: pie-in 110ms ease-out; }
+.pie-center circle { fill: #fdf2f2; stroke: rgba(229, 72, 77, 0.35); transition: fill 80ms; }
+.pie-center path { stroke: var(--cancel); stroke-width: 2.2; opacity: 0.6; stroke-linecap: round; }
+.pie-center.active circle { fill: #fbdcdc; }
+.pie-center.active path { opacity: 1; }
+.pie-pointer { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 2 3; opacity: 0.6; }
+
+
+.pie, .pie-sub { animation: none; }
+.pie-backdrop { filter: none; }</style><g class="pie" transform="translate(0 0)"><circle r="120" class="pie-edge "></circle><circle r="106" class="pie-backdrop"></circle><g class="pie-wedge "><path class="pie-slice" d="M-43.15169174265338 -94.62521598256473 A104 104 0 0 1 43.15169174265338 -94.62521598256473 L10.787922935663344 -23.65630399564118 A26 26 0 0 0 -10.787922935663344 -23.65630399564118Z"></path><g transform="translate(0 -67)" class="pie-face"><g class="pie-icon" transform="translate(0 -7)"><circle r="7" class="icon-thick"></circle></g><text y="15" class="pie-label">Line</text></g><path class="pie-more" d="M-6.784456191740679 -96.76244702456812 L0 -101 L6.784456191740679 -96.76244702456812"></path></g><g class="pie-wedge "><path class="pie-slice" d="M47.07633315600998 -92.73520828997127 A104 104 0 0 1 100.88561262500217 -25.260506037647023 L25.221403156250542 -6.315126509411756 A26 26 0 0 0 11.769083289002495 -23.183802072492817Z"></path><g transform="translate(52.382709325358 -41.77381672453515)" class="pie-face"><g class="pie-icon" transform="translate(0 -7)"><rect x="-7" y="-7" width="10" height="10" rx="1.5"></rect><rect x="-3" y="-3" width="10" height="10" rx="1.5"></rect></g><text y="15" class="pie-label">Copy</text></g></g><g class="pie-wedge "><path class="pie-slice" d="M101.85491900600616 -21.013697301520423 A104 104 0 0 1 82.65060950926575 63.12588017403695 L20.662652377316437 15.781470043509238 A26 26 0 0 0 25.46372975150154 -5.253424325380106Z"></path><g transform="translate(65.32017011618218 14.90890257507306)" class="pie-face"><g class="pie-icon" transform="translate(0 -7)"><rect x="-7" y="-1" width="9" height="8" class="icon-dim"></rect><rect x="-2" y="-7" width="9" height="8" class="icon-solid"></rect></g><text y="15" class="pie-label">To Front</text></g></g><g class="pie-wedge "><path class="pie-slice" d="M79.93467338277428 66.53155635628252 A104 104 0 0 1 2.1780116678691392 103.97719108138394 L0.5445029169672848 25.994297770345984 A26 26 0 0 0 19.98366834569357 16.63288908907063Z"></path><g transform="translate(29.0702105208764 60.364914149462074)" class="pie-face"><g class="pie-icon" transform="translate(0 -7)"><path d="M-7 -5 h14 M-2 -5 v-2 h4 v2 M-5 -5 l1 12 h8 l1 -12"></path></g><text y="15" class="pie-label">Delete</text></g></g><g class="pie-wedge "><path class="pie-slice" d="M-2.1780116678691144 103.97719108138394 A104 104 0 0 1 -79.93467338277429 66.53155635628251 L-19.983668345693573 16.632889089070627 A26 26 0 0 0 -0.5445029169672786 25.994297770345984Z"></path><g transform="translate(-29.070210520876387 60.36491414946208)" class="pie-face"><g class="pie-icon" transform="translate(0 -7)"><rect x="-2" y="-7" width="9" height="8" class="icon-solid"></rect><rect x="-7" y="-1" width="9" height="8" class="icon-dim"></rect></g><text y="15" class="pie-label">To Back</text></g></g><g class="pie-wedge "><path class="pie-slice" d="M-82.65060950926569 63.12588017403701 A104 104 0 0 1 -101.85491900600614 -21.013697301520445 L-25.463729751501536 -5.253424325380111 A26 26 0 0 0 -20.662652377316423 15.781470043509252Z"></path><g transform="translate(-65.32017011618218 14.908902575073077)" class="pie-face"><g class="pie-icon" transform="translate(0 -7)"><circle cx="-4" cy="5" r="2.5"></circle><circle cx="4" cy="5" r="2.5"></circle><path d="M-2.5 3 L5 -8 M2.5 3 L-5 -8"></path></g><text y="15" class="pie-label">Cut</text></g></g><g class="pie-wedge "><path class="pie-slice" d="M-100.8856126250022 -25.26050603764695 A104 104 0 0 1 -47.07633315600996 -92.73520828997128 L-11.76908328900249 -23.18380207249282 A26 26 0 0 0 -25.22140315625055 -6.315126509411738Z"></path><g transform="translate(-52.38270932535801 -41.77381672453514)" class="pie-face"><g class="pie-icon" transform="translate(0 -7)"><circle r="7.5" class="icon-solid"></circle></g><text y="15" class="pie-label">Fill</text></g><path class="pie-more" d="M-79.88196665115997 -55.02609748058612 L-78.96497972927102 -62.97246998773207 L-71.42188815774465 -65.6347003648422"></path></g><g class="pie-center active"><circle r="18"></circle><path d="M-4 -4 L4 4 M4 -4 L-4 4"></path></g></g></svg>

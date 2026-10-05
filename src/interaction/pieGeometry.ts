@@ -73,3 +73,28 @@ export function selectedItem(items: PieItem[], sel: PieSelection): PieItem | nul
   const item = items[sel.index];
   return item.children && sel.sub >= 0 ? item.children[sel.sub] : item;
 }
+
+/**
+ * Keyboard navigation. ← / → step counterclockwise / clockwise around the ring (starting at the
+ * top item) or, inside a submenu, along its arc. ↑ enters the highlighted item's submenu at its
+ * middle option, ↓ leaves it. Returns null for keys the menu doesn't use.
+ */
+export function pieStep(items: PieItem[], sel: PieSelection, key: string): PieSelection | null {
+  const n = items.length;
+  if (sel.locked !== null) {
+    const m = items[sel.locked].children!.length;
+    if (key === 'ArrowLeft') return { ...sel, sub: Math.max(0, sel.sub - 1) };
+    if (key === 'ArrowRight') return { ...sel, sub: Math.min(m - 1, sel.sub + 1) };
+    if (key === 'ArrowDown') return { index: sel.locked, sub: -1, locked: null };
+    return key === 'ArrowUp' ? sel : null;
+  }
+  if (key === 'ArrowLeft' || key === 'ArrowRight') {
+    const index = sel.index < 0 ? 0 : (sel.index + (key === 'ArrowRight' ? 1 : n - 1)) % n;
+    return { index, sub: -1, locked: null };
+  }
+  if (key === 'ArrowUp') {
+    const children = sel.index >= 0 ? items[sel.index].children : undefined;
+    return children ? { index: sel.index, sub: Math.floor((children.length - 1) / 2), locked: sel.index } : sel;
+  }
+  return key === 'ArrowDown' ? sel : null;
+}

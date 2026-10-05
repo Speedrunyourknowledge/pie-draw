@@ -28,6 +28,8 @@ html, body, #root {
   height: 100vh;
   display: block;
   touch-action: none;
+  /* A pen (hotspot at its tip): dragging draws. Shapes, handles and buttons show their own cursors. */
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='21' height='21' viewBox='0 0 24 24' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.2 20.8 L4.4 16.2 L15.6 5 a2 2 0 0 1 2.8 0 l0.6 0.6 a2 2 0 0 1 0 2.8 L7.8 19.6 Z M13.6 7 L17 10.4' stroke='white' stroke-width='3.6'/%3E%3Cpath d='M3.2 20.8 L4.4 16.2 L15.6 5 a2 2 0 0 1 2.8 0 l0.6 0.6 a2 2 0 0 1 0 2.8 L7.8 19.6 Z M13.6 7 L17 10.4' fill='white' stroke='%231f2933' stroke-width='1.6'/%3E%3C/svg%3E") 3 18, crosshair;
   background: transparent; /* page provides the color, so the raised canvas never hides the chrome */
 }
 /* An open pie menu floats above the surrounding chrome so no wedge is ever covered. */
@@ -115,7 +117,6 @@ svg.canvas.eraser .shape.erase-target .halo, svg.canvas.eraser .shape.erase-targ
   pointer-events: none;
 }
 .ghost { opacity: 0.22; pointer-events: none; }
-.canvas.mode-drawing { cursor: crosshair; }
 
 /* ---- pie menu ---- */
 .pie { pointer-events: none; animation: pie-in 110ms ease-out; transform-box: view-box; }
@@ -530,3 +531,12 @@ svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo {
 /* Holding Shift (in the draw or select tool) means a drag box-selects, so show the select cursor. */
 .canvas.shift-select, .canvas.shift-select .shape, .canvas.shift-select .group-area { cursor: crosshair; }
 .canvas.shift-select .shape:hover .halo { display: none; }
+
+/* With the menu open it alone has focus: shapes, handles and edges beneath it give up their cursors
+   and hover looks, the wedges and center × show the pointer, and anywhere else (a click there
+   dismisses) shows the default arrow. Last, so it outranks the tool cursors. */
+.canvas.mode-menuOpen { cursor: default; }
+.canvas.mode-menuOpen.over-menu { cursor: pointer; }
+/* .shape and .group-area are named to match the three-class tool rules above (hand, eraser, shift). */
+.canvas.mode-menuOpen *, .canvas.mode-menuOpen .shape, .canvas.mode-menuOpen .group-area { cursor: inherit; }
+.canvas.mode-menuOpen .handle:hover { fill: #fff; }

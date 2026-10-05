@@ -3,11 +3,12 @@ import { newDoc, openDoc, saveDoc } from './file/fileOps';
 import { isMod } from './platform';
 import { useStore } from './store';
 import { PALETTE } from './types';
-import { fitToContent, resetZoom, zoomIn, zoomOut } from './view';
+import { fitToContent, resetZoom, selectAdjacent, zoomIn, zoomOut } from './view';
 
 const PAN_STEP = 60;
 
-export function useKeyboard(onEscape: () => void) {
+/** onMenuKey gets first look at each key and returns true if the pie menu used it (M, or keys in an open menu). */
+export function useKeyboard(onEscape: () => void, onMenuKey: (e: KeyboardEvent) => boolean) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const st = useStore.getState();
@@ -20,6 +21,11 @@ export function useKeyboard(onEscape: () => void) {
         if (key === 'escape' || key === '?') st.setHelpOpen(false);
         else handled = false;
         if (handled) e.preventDefault();
+        return;
+      }
+
+      if (onMenuKey(e)) {
+        e.preventDefault();
         return;
       }
 
@@ -46,6 +52,10 @@ export function useKeyboard(onEscape: () => void) {
       else if (key === '-' || key === '_') zoomOut();
       else if (key === '0') resetZoom();
       else if (key === 'f') fitToContent();
+      // Tab steps through the shapes, unless focus is on a control, where it moves focus as usual.
+      else if (key === 'tab' && !(document.activeElement instanceof HTMLElement && document.activeElement !== document.body)) {
+        selectAdjacent(e.shiftKey ? -1 : 1);
+      }
       else if (key === 'v') st.setTool(st.tool === 'select' ? 'draw' : 'select');
       else if (key === 'h') st.setTool(st.tool === 'hand' ? 'draw' : 'hand');
       else if (key === 'e') st.setTool(st.tool === 'eraser' ? 'draw' : 'eraser');
@@ -66,5 +76,5 @@ export function useKeyboard(onEscape: () => void) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onEscape]);
+  }, [onEscape, onMenuKey]);
 }
