@@ -2,12 +2,12 @@
   --bg: #ffffff;
   --cancel: #e5484d;
   --muted: #6b7280;
-  --ink: #1f2933;
+  --black: #1f2933;
   --accent: #3e63dd;
   --panel: #ffffff;
   --panel-line: rgba(31, 41, 51, 0.12);
   font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  color: var(--ink);
+  color: var(--black);
 }
 /* ---- pie menu ---- */
 .pie { pointer-events: none; animation: pie-in 110ms ease-out; transform-box: view-box; }
@@ -22,7 +22,7 @@
   transition: fill 80ms;
 }
 .pie-wedge.active .pie-slice { fill: var(--accent); stroke: var(--accent); }
-.pie-face { color: var(--ink); }
+.pie-face { color: var(--black); }
 .pie-wedge.active .pie-face { color: #fff; }
 .pie-icon * {
   fill: none;
@@ -44,7 +44,7 @@
 .pie-swatch-none circle { fill: #fff; stroke: rgba(31, 41, 51, 0.25); stroke-width: 1; }
 .pie-swatch-none path { stroke: var(--cancel); stroke-width: 2; stroke-linecap: round; }
 .pie-icon .icon-thick { stroke-width: 3.2; }
-.pie-more { fill: none; stroke: currentColor; stroke-width: 1.5; color: var(--ink); opacity: 0.5; }
+.pie-more { fill: none; stroke: currentColor; stroke-width: 1.5; color: var(--black); opacity: 0.5; }
 .pie-wedge.active .pie-more { color: #fff; opacity: 0.9; }
 .pie-sub.preview { opacity: 0.55; }
 .pie-sub { animation: pie-in 110ms ease-out; }

@@ -69,7 +69,7 @@ Saving and opening files can be done through the **File** menu in the toolbar. D
 
 **Color swatches that fan out.** Two swatches replace a permanent palette and are told apart by shape (ring vs. disc), not just label. Clicking fans the colors out in an arc that echoes the pie menu; dragging a swatch onto a shape recolors it without selecting it first.
 
-**Ghost preview for recognition.** Instead of swapping your stroke on release, the recognized shape appears as a ghost *behind* your ink, at the exact size it will snap to. It changes only after several consecutive frames agree, and ambiguous strokes stay freehand. Every primitive can also be created reliably from the menu.
+**Ghost preview for recognition.** Instead of swapping your stroke on release, the recognized shape appears as a ghost *behind* what you're drawing, at the exact size it will snap to. It changes only after several consecutive frames agree, and ambiguous strokes stay freehand. Every primitive can also be created reliably from the menu.
 
 **Feedback and discoverability.** A status line always says what you can do right now, in every state and tool. An empty canvas shows how to open the menu, and the help panel draws the real menu layouts.
 

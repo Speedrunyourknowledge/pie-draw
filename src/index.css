@@ -2,12 +2,12 @@
   --bg: #ffffff;
   --cancel: #e5484d;
   --muted: #6b7280;
-  --ink: #1f2933;
+  --black: #1f2933;
   --accent: #3e63dd;
   --panel: #ffffff;
   --panel-line: rgba(31, 41, 51, 0.12);
   font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  color: var(--ink);
+  color: var(--black);
 }
 
 * { box-sizing: border-box; }
@@ -93,7 +93,7 @@ svg.canvas.eraser .shape.erase-target .halo, svg.canvas.eraser .shape.erase-targ
   left: 50%;
   padding: 8px 14px;
   border-radius: 8px;
-  background: var(--ink);
+  background: var(--black);
   color: #fff;
   font-size: 13px;
   opacity: 0;
@@ -131,7 +131,7 @@ svg.canvas.eraser .shape.erase-target .halo, svg.canvas.eraser .shape.erase-targ
   transition: fill 80ms;
 }
 .pie-wedge.active .pie-slice { fill: var(--accent); stroke: var(--accent); }
-.pie-face { color: var(--ink); }
+.pie-face { color: var(--black); }
 .pie-wedge.active .pie-face { color: #fff; }
 .pie-icon * {
   fill: none;
@@ -153,7 +153,7 @@ svg.canvas.eraser .shape.erase-target .halo, svg.canvas.eraser .shape.erase-targ
 .pie-swatch-none circle { fill: #fff; stroke: rgba(31, 41, 51, 0.25); stroke-width: 1; }
 .pie-swatch-none path { stroke: var(--cancel); stroke-width: 2; stroke-linecap: round; }
 .pie-icon .icon-thick { stroke-width: 3.2; }
-.pie-more { fill: none; stroke: currentColor; stroke-width: 1.5; color: var(--ink); opacity: 0.5; }
+.pie-more { fill: none; stroke: currentColor; stroke-width: 1.5; color: var(--black); opacity: 0.5; }
 .pie-wedge.active .pie-more { color: #fff; opacity: 0.9; }
 .pie-sub.preview { opacity: 0.55; }
 .pie-sub { animation: pie-in 110ms ease-out; }
@@ -165,7 +165,7 @@ svg.canvas.eraser .shape.erase-target .halo, svg.canvas.eraser .shape.erase-targ
 
 /* ---- chrome around the canvas ---- */
 button { font: inherit; color: inherit; }
-.key { font-weight: 700; color: var(--ink); white-space: nowrap; }
+.key { font-weight: 700; color: var(--black); white-space: nowrap; }
 .topbar svg, .nav svg, .help-close svg, .empty-help svg {
   width: 18px;
   height: 18px;
@@ -193,7 +193,7 @@ button { font: inherit; color: inherit; }
 }
 .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .brand-mark { width: 22px; height: 22px; flex: none; }
-.brand-ring { fill: none; stroke: var(--ink); stroke-width: 1.8; }
+.brand-ring { fill: none; stroke: var(--black); stroke-width: 1.8; }
 .brand-slice { fill: var(--accent); }
 .brand-name { font-weight: 700; font-size: 15px; letter-spacing: -0.01em; }
 .doc-name {
@@ -338,8 +338,10 @@ button { font: inherit; color: inherit; }
   line-height: 1.5;
   user-select: text;
   -webkit-user-select: text;
-  will-change: transform; /* own compositor layer, so scrolling doesn't repaint what's behind it */
+  overscroll-behavior: contain;
 }
+/* A live backdrop-filter under the overlay is re-sampled on every scroll frame and flashes white in Chrome. */
+.help-open .topbar { backdrop-filter: none; }
 .help-head { display: flex; justify-content: space-between; align-items: center; }
 .help h2 { margin: 0; font-size: 20px; }
 .help h3 { margin: 18px 0 6px; font-size: 14px; }

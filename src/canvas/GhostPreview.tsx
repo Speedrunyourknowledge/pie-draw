@@ -6,7 +6,7 @@ import { ShapeView } from './ShapeView';
 export function GhostPreview({ result, color, zoom }: { result: Recognized; color: string; zoom: number }) {
   const shape = useMemo(() => {
     const s = shapeFromRecognized(result, color, null);
-    return { ...s, id: 'ghost', fill: color }; // filled so it reads as a "shadow" behind the ink
+    return { ...s, id: 'ghost', fill: color }; // filled so it reads as a "shadow" behind the stroke
   }, [result, color]);
   return <ShapeView shape={shape} className="ghost" interactive={false} zoom={zoom} />;
 }

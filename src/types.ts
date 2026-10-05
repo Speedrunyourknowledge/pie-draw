@@ -50,7 +50,7 @@ export type Shape = RectLike | EllipseLike | Triangle | Freehand;
 export type TransformPatch = Partial<Pick<BaseShape, 'x' | 'y' | 'scaleX' | 'scaleY' | 'fill' | 'stroke'>>;
 
 export const PALETTE = [
-  { name: 'Ink', value: '#1f2933' },
+  { name: 'Black', value: '#1f2933' },
   { name: 'Red', value: '#e5484d' },
   { name: 'Blue', value: '#3e63dd' },
   { name: 'Green', value: '#30a46c' },

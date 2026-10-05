@@ -11,13 +11,14 @@ export default function App() {
   const fileName = useStore((s) => s.fileName);
   const dirty = useStore((s) => s.dirty);
   const menuOpen = useStore((s) => s.mode === 'menuOpen');
+  const helpOpen = useStore((s) => s.helpOpen);
 
   useEffect(() => {
     document.title = `${dirty ? '• ' : ''}${fileName ?? 'Untitled'} — Pie Draw`;
   }, [fileName, dirty]);
 
   return (
-    <div className={menuOpen ? 'app menu-open' : 'app'}>
+    <div className={`app${menuOpen ? ' menu-open' : ''}${helpOpen ? ' help-open' : ''}`}>
       <Canvas />
       <TopBar />
       {/* One corner cluster for the few on-screen controls, away from the work area. */}
