@@ -368,14 +368,14 @@ button { font: inherit; color: inherit; }
 
 /* ---- color pickers (top of the corner cluster): Fill above Line ---- */
 .color-pickers { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.color-picker { position: relative; width: 48px; height: 62px; }
+.color-picker { position: relative; width: 48px; height: 64px; }
 .color-label {
   position: absolute;
   left: 0;
   right: 0;
   top: 49px;
   text-align: center;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.02em;
   color: var(--muted);
@@ -418,10 +418,9 @@ button { font: inherit; color: inherit; }
   touch-action: none;
   transform: translate(var(--x), var(--y)); /* no fan-out animation: the palette appears instantly */
 }
-/* Fans sit a little below their button so they stay close to it. The line fan opens in the same
-   spot as the fill fan (one picker height + gap up), so it never covers the Fill button. */
-.fan-swatch.fill { top: calc(4px + 20px); }
-.fan-swatch.line { top: calc(4px + 20px - 68px); }
+/* Where each fan is centered relative to its own button. */
+.fan-swatch.fill { top: 4px; } /* centered on the button, so every swatch is the same distance away */
+.fan-swatch.line { top: calc(4px + 2px); left: calc(4px + 8px); }
 .fan-swatch:hover { transform: translate(var(--x), var(--y)) scale(1.12); }
 .fan-swatch.active { box-shadow: 0 0 0 2px var(--swatch), 0 3px 10px rgba(31, 41, 51, 0.18); }
 .fan-swatch.none.active { box-shadow: 0 0 0 2px var(--cancel), 0 3px 10px rgba(31, 41, 51, 0.18); }
@@ -429,7 +428,7 @@ button { font: inherit; color: inherit; }
   position: absolute;
   right: -7px;
   bottom: -6px;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   color: var(--muted);
   background: #fff;

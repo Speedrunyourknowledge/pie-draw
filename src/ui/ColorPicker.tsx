@@ -5,7 +5,10 @@ import { PALETTE } from '../types';
 
 const DRAG_THRESHOLD = 5;
 const FAN_RADIUS = 84; // swatches fan out on a quarter arc, from left to straight up
-const FAN_STEP = 34; // min distance between neighboring swatches along the arc
+const FAN_STEP = { line: 36, fill: 35 }; // min distance between neighboring swatches along the arc
+const FAN_MAX_RADIUS = 92; // past this, the arc wraps further around the button (below horizontal) instead of growing
+// Angle the arc ends at (90° = straight up). The line fan stops short so it clears the Fill button above.
+const FAN_END = { line: (132.5 * Math.PI) / 180, fill: Math.PI / 2 };
 
 type Kind = 'line' | 'fill';
 
@@ -131,8 +134,10 @@ export function ColorPicker({ kind }: { kind: Kind }) {
     <div className={`color-picker ${kind}`} ref={rootRef} onMouseDown={(e) => e.preventDefault()}>
       {open &&
         options.map((c, i) => {
-          const a = Math.PI - (i * (Math.PI / 2)) / (options.length - 1); // 180° → 90°
-          const r = Math.max(FAN_RADIUS, (FAN_STEP * (options.length - 1)) / (Math.PI / 2));
+          const arcLen = FAN_STEP[kind] * (options.length - 1);
+          const r = Math.min(FAN_MAX_RADIUS, Math.max(FAN_RADIUS, arcLen / (Math.PI / 2)));
+          const span = Math.max(Math.PI / 2, arcLen / r);
+          const a = FAN_END[kind] + span - (i * span) / (options.length - 1); // left → up
           const x = Math.cos(a) * r, y = -Math.sin(a) * r;
           const key = c.value ? `${kind === 'fill' ? '⇧' : ''}${i + 1}` : kind === 'fill' ? '⇧0' : '';
           return (
