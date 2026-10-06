@@ -53,29 +53,25 @@ Saving and opening files can be done through the **File** menu in the toolbar. D
 
 ## Design Decisions
 
-**Pie menu at the pointer instead of a toolbar.** A toolbar makes every command a trip to the screen edge. The pie menu opens where you're working, every item is equally close, and wedges widen as you move outward (Fitts' law). The cost is discoverability, which the empty-canvas prompt, status line and help panel offset.
+**Pie menu at the pointer instead of a toolbar.** A toolbar makes every command a trip to the screen edge. The pie menu opens where you're working. Every item is equally close, and the wedges widen as you move outward. In Fitts's law terms, the distance is short and the target widens as you move, so every command is fast to hit. The cost is discoverability. An empty-canvas prompt shows new users how to open the menu, and the help panel lists every command.
 
-**Direction, not distance, picks the item.** Only the angle counts, so each wedge is a large target. The slow, label-reading motion is the same one that later becomes a quick flick from memory, which is why layouts never change. About eight items fit per ring, so further commands go in a submenu ring.
+**Direction, not distance, selects the menu option.** The slow, label-reading motion  later becomes a quick directional flick from memory.
 
-**A visible way out.** Releasing on the center × or beyond the outer ring cancels, and both light up before you let go. The edge (~120 px, ~185 px on submenus) is still far larger than a toolbar button.
+**A visible way out.** Clicking on the center X or beyond the outer menu ring cancels, and both light up to indicate this.
 
-**Context instead of modes.** The menu shows only what applies under the pointer, so there are no disabled items. Dragging means *move* on a shape and *draw* on empty canvas. The trade-off is that a direction means different things in the two menus (↑ is Square on canvas, Line on a shape). The select, hand and eraser tools are the only modes; each is highlighted, changes the cursor and status line, and exits with its key or Esc. Outside them the cursor is a pen, since a drag draws. Opening the menu works the same in every mode.
+**File commands in a conventional toolbar.** File commands are used rarely, so they would take up space in a pie menu that could go to more frequent actions. A File menu in the top left is familiar to people so it is easily found.
 
-**File commands in a conventional menu.** New, Open and Save are used rarely, so they don't earn a pie direction. Moving them to a File menu at the top left, where people expect it, freed a wedge and widened the rest. It opens on hover with a short grace period, or on click for touch and keyboard.
+**Two ways to box-select.** A plain drag on empty canvas already draws, so box selection uses Shift-drag or the select tool. The box selects anything it *touches*, so a rough drag is enough, and selected shapes are outlined. The selected group then acts as one target for object manipulation.
 
-**Two ways to box-select.** A plain drag on empty canvas already draws, so box selection uses Shift-drag or the select tool. The box selects anything it *touches*, so a rough drag is enough, and touched shapes are outlined before release. The selected group's box then acts as one target for move, menu and scale. On a Mac, Ctrl-click is a right-click, so Cmd-click adds to the selection.
+**Minimal toolbar.** The toolbar is minimal to reduce the work of scanning for the desired option.
 
-**Minimal, clustered chrome.** A thin top bar holds the document commands (File, Paste, Undo, Redo, Clear all, Help). Everything else sits in one lower-right stack (color swatches, select, hand, eraser, zoom) with large 48×44 px buttons, each with a keyboard or gesture equivalent.
+**Right-side tools.** The remaining tools sit together in a stack on the right. Keeping them in one place means the user knows exactly where to look, and the large buttons are easy to hit. Each tool has a keyboard or gesture shortcut, so experienced users can skip the stack entirely.
 
-**Color swatches that fan out.** Two swatches replace a permanent palette and are told apart by shape (ring vs. disc), not just label. Clicking fans the colors out in an arc that echoes the pie menu; dragging a swatch onto a shape recolors it without selecting it first.
+**Color swatches that fan out.** There are two color swatches, and they are distinguished by their appearance, not just their label. Clicking a swatch fans the colors out in an arc that echoes the pie menu. Dragging a swatch onto a shape recolors it without having to select it first.
 
-**Ghost preview for recognition.** Instead of swapping your stroke on release, the recognized shape appears as a ghost *behind* what you're drawing, at the exact size it will snap to. It changes only after several consecutive frames agree, and ambiguous strokes stay freehand. Every primitive can also be created reliably from the menu.
+**Ghost preview for shape recognition.** When drawing freehand, a recognized shape appears as a ghost *behind* the drawing, at the exact size it will snap to. It changes only after multiple consecutive frames agree.
 
-**Feedback and discoverability.** A status line always says what you can do right now, in every state and tool. An empty canvas shows how to open the menu, and the help panel draws the real menu layouts.
-
-**Direct manipulation and safe experimentation.** Shapes are moved and scaled by grabbing them, not through property panels. Every document change is undoable (one drag or pinch = one step), so Clear all and the eraser need no confirmation dialogs.
-
-**Vector objects, one drawing style.** Every stroke is a selectable path object, like the primitives. All shapes share one line width; closed shapes can take a fill and are selectable by their interior even when outline-only.
+**Feedback and discoverability.** A status line at the bottom always says what the user can currently do, in every state and tool. When the canvas is blank, the user is instructed how to open the pie menu and how to access the help panel.
 
 ## Limitations / Not Yet Implemented
 
