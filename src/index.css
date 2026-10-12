@@ -50,6 +50,10 @@ svg.canvas.eraser .shape.erase-target .halo, svg.canvas.eraser .shape.erase-targ
   display: inline;
   --halo-color: rgb(214, 52, 52);
 }
+/* Create tool: a crosshair with the armed shape beside it (see shapeCursor.ts), over everything on
+   the canvas, since a drag draws the shape wherever it starts. */
+.canvas.create, .canvas.create * { cursor: var(--create-cursor, crosshair); }
+.canvas.create .shape:hover .halo { display: none; }
 
 /* ---- shapes ---- */
 .shape { cursor: move; }

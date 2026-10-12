@@ -33,7 +33,7 @@ Right-click, or left-press-and-hold for ~300 ms, to open a radial menu centered 
 
 ### Drawing and Editing
 
-- **Create shapes** from the empty-canvas menu. The shape appears where the menu was opened.
+- **Create shapes** from the empty-canvas menu. Choosing a shape turns the pointer into a crosshair with a small icon of that shape. Drag to draw it at any size, or click to place it at a default size. The pointer then returns to the pen.
 - **Freehand drawing** with live shape recognition. If a stroke closes into a recognized shape, a **preview** of that shape appears. Release to snap to that shape.
 - **Object manipulation.** Select, move, and scale objects directly, by mouse, trackpad, or keyboard.
 - **Multi-select.** Select several objects by clicking or with a selection box. A multi-selection acts as one object: moving, scaling, and recoloring affects all selected objects.
@@ -54,6 +54,8 @@ Saving and opening files can be done through the **File** menu in the toolbar. D
 ## Design Decisions
 
 **Pie menu at the pointer instead of a toolbar.** A toolbar makes every command a trip to the screen edge. The pie menu opens where you're working. Every item is equally close, and the wedges widen as you move outward. In Fitts's law terms, the distance is short and the target widens as you move, so every command is fast to hit. The cost is discoverability. An empty-canvas prompt shows new users how to open the menu, and the help panel lists every command.
+
+**Choosing a shape arms a tool instead of dropping a shape.** A shape that appears at a fixed size where the menu was opened almost always has to be moved and scaled afterward. Dragging it out sets position and size in one gesture. The crosshair gives a precise corner to aim with, and the shape icon beside it shows what the next drag will draw, so the mode is visible right where the user is looking. The tool is one-shot and Esc cancels it, so it can't be left on by accident.
 
 **Direction, not distance, selects the menu option.** The slow, label-reading motion  later becomes a quick directional flick from memory.
 

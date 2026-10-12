@@ -1,4 +1,4 @@
-import type { Pt, Shape, ShapeType } from './types';
+import type { PrimitiveType, Pt, Shape, ShapeType } from './types';
 
 export interface Bounds {
   minX: number;
@@ -162,7 +162,7 @@ export const canFill = (s: Shape) => s.type !== 'freehand';
 
 /** A primitive at a default size, centered on (x, y). */
 export function makePrimitive(
-  type: Exclude<ShapeType, 'freehand'>,
+  type: PrimitiveType,
   x: number,
   y: number,
   color: string,
@@ -187,6 +187,47 @@ export function makePrimitive(
           [0, -62],
           [72, 62],
           [-72, 62],
+        ],
+      };
+  }
+}
+
+/**
+ * A primitive filling the box dragged from `a` to `b`, each side at least `min` long. Squares and
+ * circles keep equal sides, as does any shape when `even`; the box then grows from `a` toward `b`.
+ */
+export function makePrimitiveInBox(
+  type: PrimitiveType,
+  a: Pt,
+  b: Pt,
+  color: string,
+  fill: string | null,
+  even = false,
+  min = 0,
+): Shape {
+  let w = Math.abs(b[0] - a[0]), h = Math.abs(b[1] - a[1]);
+  if (even || type === 'square' || type === 'circle') w = h = Math.max(w, h);
+  w = Math.max(w, min);
+  h = Math.max(h, min);
+  const x = a[0] + (b[0] < a[0] ? -w : w) / 2;
+  const y = a[1] + (b[1] < a[1] ? -h : h) / 2;
+  const style = paint(color, fill);
+  switch (type) {
+    case 'square':
+    case 'rectangle':
+      return { ...base(type, x, y), ...style, type, w, h };
+    case 'circle':
+    case 'ellipse':
+      return { ...base(type, x, y), ...style, type, rx: w / 2, ry: h / 2 };
+    case 'triangle':
+      return {
+        ...base(type, x, y),
+        ...style,
+        type,
+        points: [
+          [0, -h / 2],
+          [w / 2, h / 2],
+          [-w / 2, h / 2],
         ],
       };
   }

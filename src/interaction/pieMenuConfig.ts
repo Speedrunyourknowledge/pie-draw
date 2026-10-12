@@ -1,6 +1,6 @@
-import { canFill, makePrimitive } from '../geometry';
+import { canFill } from '../geometry';
 import { useStore } from '../store';
-import { PALETTE, type Pt, type Shape } from '../types';
+import { PALETTE, type PrimitiveType, type Pt, type Shape } from '../types';
 
 export interface CommandContext {
   origin: Pt; // where the menu was opened, in canvas coordinates
@@ -19,12 +19,8 @@ export interface PieItem {
 
 const st = () => useStore.getState();
 
-const create =
-  (type: 'square' | 'rectangle' | 'circle' | 'ellipse' | 'triangle') => (ctx: CommandContext) => {
-    const shape = makePrimitive(type, ctx.origin[0], ctx.origin[1], st().currentColor, st().currentFill);
-    st().addShape(shape, true);
-    ctx.pulse(shape.id);
-  };
+/** Arms the create tool: the pointer becomes a crosshair, and the next drag draws the shape. */
+const create = (type: PrimitiveType) => () => st().setCreateTool(type);
 
 /** Line color submenu: recolors the selected shapes, or sets the color for new ones. */
 const lineItem = (prefix: string): PieItem => ({

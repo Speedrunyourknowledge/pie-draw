@@ -1,11 +1,14 @@
 import { create } from 'zustand';
 import { canFill, groupBounds, newId } from './geometry';
 import { kbd } from './platform';
-import { PALETTE, type Shape, type TransformPatch } from './types';
+import { PALETTE, type PrimitiveType, type Shape, type TransformPatch } from './types';
 
 export type Mode = 'idle' | 'drawing' | 'selecting' | 'dragging' | 'scaling' | 'erasing' | 'menuOpen';
-/** What a plain left-drag does: draw/move (default), box-select, pan the view, or erase whole shapes. */
-export type Tool = 'draw' | 'select' | 'hand' | 'eraser';
+/**
+ * What a plain left-drag does: draw/move (default), box-select, pan the view, erase whole shapes,
+ * or create one shape of `createType` (chosen from the pie menu).
+ */
+export type Tool = 'draw' | 'select' | 'hand' | 'eraser' | 'create';
 
 export interface Toast {
   id: number;
@@ -43,6 +46,7 @@ interface AppState {
   helpOpen: boolean;
   dropTargetId: string | null; // shape under a color being dragged from the dock
   tool: Tool;
+  createType: PrimitiveType; // the shape the create tool draws
 
   /** Records the current shapes for undo. Call once before a change (or at the start of a drag). */
   checkpoint: () => void;
@@ -74,6 +78,8 @@ interface AppState {
   refill: (id: string, fill: string | null) => void;
   setDropTarget: (id: string | null) => void;
   setTool: (tool: Tool) => void;
+  /** Switches to the create tool, armed with this shape. */
+  setCreateTool: (type: PrimitiveType) => void;
   bringToFront: () => void;
   sendToBack: () => void;
   nudge: (dx: number, dy: number) => void;
@@ -138,6 +144,7 @@ export const useStore = create<AppState>()((set, get) => {
     helpOpen: false,
     dropTargetId: null,
     tool: 'draw',
+    createType: 'square',
 
     checkpoint: () =>
       set((st) => ({ past: [...st.past, st.shapes].slice(-HISTORY_LIMIT), future: [], dirty: true })),
@@ -256,6 +263,8 @@ export const useStore = create<AppState>()((set, get) => {
     // Panning and erasing drop the selection; drawing and box-selecting keep it.
     setTool: (tool) =>
       set({ tool, selectedIds: tool === 'hand' || tool === 'eraser' ? [] : get().selectedIds }),
+
+    setCreateTool: (createType) => set({ tool: 'create', createType, selectedIds: [] }),
 
     // Both keep the selected shapes' order relative to each other.
     bringToFront: () => {

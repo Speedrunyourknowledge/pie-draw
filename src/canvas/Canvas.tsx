@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import simplify from 'simplify-js';
-import { STROKE_WIDTH, dist, groupBounds, keepsAspect, makeFreehand, shapeTouchesRect, worldBounds, type Bounds } from '../geometry';
+import { STROKE_WIDTH, dist, groupBounds, keepsAspect, makeFreehand, makePrimitive, makePrimitiveInBox, shapeTouchesRect, worldBounds, type Bounds } from '../geometry';
 import { PieMenu } from '../interaction/PieMenu';
 import {
   DEAD_ZONE,
@@ -15,13 +15,14 @@ import {
 import { menuFor, type PieItem } from '../interaction/pieMenuConfig';
 import { GhostTracker, overshot, recognize, shapeFromRecognized, type Recognized } from '../interaction/recognize';
 import { useStore, type Tool } from '../store';
-import type { Pt, Shape, TransformPatch } from '../types';
+import type { PrimitiveType, Pt, Shape, TransformPatch } from '../types';
 import { useKeyboard } from '../useKeyboard';
 import { isMac, kbd } from '../platform';
 import { toScreen, toWorld } from '../view';
 import { GhostPreview } from './GhostPreview';
 import { SELECTION_PAD, SelectionHandles, type Corner } from './SelectionHandles';
 import { ShapeView } from './ShapeView';
+import { shapeCursor } from './shapeCursor';
 
 const MOVE_THRESHOLD = 4; // px before a press becomes a drag or a stroke
 const HOLD_MS = 300; // left-press-and-hold opens the menu
@@ -33,12 +34,14 @@ type Gesture =
   | { kind: 'none' }
   // additive: Shift or Cmd/Ctrl held, so a click toggles the shape and a drag adds a box to the selection.
   | { kind: 'press'; start: Pt; screen: Pt; shapeId: string | null; additive: boolean }
-  // In the hand or eraser tool: a drag pans or erases, a hold opens the menu, a click erases.
-  | { kind: 'toolPress'; tool: 'hand' | 'eraser'; screen: Pt; client: { x: number; y: number } }
+  // In the hand, eraser or create tool: a drag pans, erases or draws the shape, a hold opens the
+  // menu, a click erases or places the shape at its default size.
+  | { kind: 'toolPress'; tool: 'hand' | 'eraser' | 'create'; start: Pt; screen: Pt; client: { x: number; y: number } }
   | { kind: 'pan'; last: Pt }
   | { kind: 'erase'; last: { x: number; y: number }; checkpointed: boolean }
   | { kind: 'drag'; start: Pt; origs: Map<string, Pt> }
   | { kind: 'scale'; shapes: Shape[]; corner: Corner; moved: boolean }
+  | { kind: 'create'; start: Pt; type: PrimitiveType; shape: Shape | null } // shape: as last drawn
   | { kind: 'marquee'; start: Pt; base: string[] } // box selection; base: selection it adds to
   | { kind: 'draw'; points: Pt[]; check: number | null; tracker: GhostTracker } // check: pending frame
   | { kind: 'menu' } // button held while the menu tracks the pointer
@@ -135,13 +138,18 @@ interface StatusInput {
   mode: string;
   selectionCount: number;
   tool: Tool;
+  createType: PrimitiveType;
 }
 
 /** One line of context-sensitive guidance, so the available actions are never a mystery. */
-function statusText({ menu, mode, selectionCount, tool }: StatusInput) {
+function statusText({ menu, mode, selectionCount, tool, createType }: StatusInput) {
   if (menu) return 'Select an option · Click the center or outside the menu to cancel';
   if (mode === 'scaling') return 'Hold Shift to keep proportions';
   if (mode === 'selecting') return 'Every shape the box touches is selected · Release to finish';
+  if (tool === 'create') {
+    if (mode === 'drawing') return 'Release to finish · Hold Shift for equal sides';
+    return `Drag to draw the ${createType} · Click to place one · Press Esc to cancel`;
+  }
   if (tool === 'hand') return 'Drag to pan · Press Esc to exit Pan mode';
   if (tool === 'eraser') return 'Click or drag across shapes to erase them · Press Esc to exit Erase mode';
   if (tool === 'select') {
@@ -162,6 +170,7 @@ export function Canvas() {
   const view = useStore((s) => s.view);
   const dropTargetId = useStore((s) => s.dropTargetId);
   const tool = useStore((s) => s.tool);
+  const createType = useStore((s) => s.createType);
 
   const svgRef = useRef<SVGSVGElement>(null);
   const gesture = useRef<Gesture>({ kind: 'none' });
@@ -174,6 +183,7 @@ export function Canvas() {
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [stroke, setStroke] = useState<Pt[] | null>(null);
   const [ghost, setGhost] = useState<Recognized | null>(null);
+  const [draft, setDraft] = useState<Shape | null>(null); // shape being dragged out with the create tool
   const [pulseId, setPulseId] = useState<string | null>(null);
   const [spaceHeld, setSpaceHeld] = useState(false);
   const [shiftHeld, setShiftHeld] = useState(false); // Shift-drag box-selects, so show the select cursor
@@ -315,6 +325,17 @@ export function Canvas() {
     st.addShape(makeFreehand(simplified, st.currentColor), false);
   };
 
+  // ---- create tool ----
+
+  /** Adds the shape the create tool made and hands the pointer back to the draw tool. */
+  const placeShape = (shape: Shape) => {
+    const st = useStore.getState();
+    setDraft(null);
+    st.addShape(shape, true);
+    st.setTool('draw');
+    pulse(shape.id);
+  };
+
   // ---- eraser ----
 
   /** Erases the shape under a viewport point; the first erase of a drag records one undo step. */
@@ -373,9 +394,9 @@ export function Canvas() {
         : sel[0].id
       : (hitShapeId(e.target) ?? sel.find((s) => inSelectionBox(s, w, st.view.zoom))?.id ?? null);
 
-    // The hand and eraser tools wait to see whether the press is a drag, a click or a hold.
-    if ((st.tool === 'hand' || st.tool === 'eraser') && !right) {
-      gesture.current = { kind: 'toolPress', tool: st.tool, screen: p, client: { x: e.clientX, y: e.clientY } };
+    // The hand, eraser and create tools wait to see whether the press is a drag, a click or a hold.
+    if ((st.tool === 'hand' || st.tool === 'eraser' || st.tool === 'create') && !right) {
+      gesture.current = { kind: 'toolPress', tool: st.tool, start: w, screen: p, client: { x: e.clientX, y: e.clientY } };
       startHold(p, shapeId);
       return;
     }
@@ -454,7 +475,10 @@ export function Canvas() {
         if (dist(p, g.screen) < MOVE_THRESHOLD) return;
         clearTimer();
         if (g.tool === 'eraser') startErase(g.client.x, g.client.y);
-        else {
+        else if (g.tool === 'create') {
+          gesture.current = { kind: 'create', start: g.start, type: st.createType, shape: null };
+          st.setMode('drawing');
+        } else {
           gesture.current = { kind: 'pan', last: g.screen };
           setPanning(true);
         }
@@ -495,6 +519,11 @@ export function Canvas() {
         st.updateShapes(scaleFromCorner(g.shapes, g.corner, w, lock));
         return;
       }
+      case 'create':
+        // The press point stays put as one corner; the pointer drags the opposite one.
+        g.shape = makePrimitiveInBox(g.type, g.start, w, st.currentColor, st.currentFill, e.shiftKey, MIN_SIZE / st.view.zoom);
+        setDraft(g.shape);
+        return;
       case 'marquee': {
         const box = boxOf(g.start, w);
         setMarquee(box);
@@ -532,7 +561,14 @@ export function Canvas() {
         if (g.tool === 'eraser') {
           startErase(g.client.x, g.client.y); // a click erases the shape under it
           gesture.current = { kind: 'none' };
+        } else if (g.tool === 'create') {
+          // A click places the shape at its default size, centered on the pointer.
+          const st = useStore.getState();
+          placeShape(makePrimitive(st.createType, g.start[0], g.start[1], st.currentColor, st.currentFill));
         }
+        break;
+      case 'create':
+        if (g.shape) placeShape(g.shape);
         break;
       case 'marquee':
         setMarquee(null);
@@ -555,6 +591,7 @@ export function Canvas() {
     setStroke(null);
     setMarquee(null);
     setGhost(null);
+    setDraft(null);
     closeMenu();
   };
 
@@ -564,6 +601,13 @@ export function Canvas() {
     useCallback(() => {
       const st = useStore.getState();
       if (menuRef.current) closeMenu();
+      else if (gesture.current.kind === 'create') {
+        // Esc mid-drag drops the shape being drawn and leaves the create tool.
+        gesture.current = { kind: 'swallow' };
+        setDraft(null);
+        st.setMode('idle');
+        st.setTool('draw');
+      }
       // In the select tool, the first Esc clears the selection and the next one leaves the tool.
       else if (st.tool === 'select' && st.selectedIds.length > 0) st.select(null);
       else if (st.tool !== 'draw') st.setTool('draw');
@@ -578,7 +622,16 @@ export function Canvas() {
         else if (gesture.current.kind === 'none') openMenuFromKeyboard();
         return true;
       }
-      if (!m) return false;
+      if (!m) {
+        // Without a mouse, Enter places the armed shape at the pointer, or mid-screen.
+        const st = useStore.getState();
+        const onCanvas = !document.activeElement || document.activeElement === document.body;
+        if (e.key !== 'Enter' || st.tool !== 'create' || gesture.current.kind !== 'none' || !onCanvas) return false;
+        const r = svgRef.current!.getBoundingClientRect();
+        const [x, y] = toWorld(hoverRef.current ?? [r.width / 2, r.height / 2], st.view);
+        placeShape(makePrimitive(st.createType, x, y, st.currentColor, st.currentFill));
+        return true;
+      }
       if (e.key === 'Enter') {
         const item = selectedItem(m.items, m.selection);
         if (item?.children) m.selection = pieStep(m.items, m.selection, 'ArrowUp')!;
@@ -594,7 +647,7 @@ export function Canvas() {
       m.selection = next;
       renderMenu();
       return true;
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- execute only uses refs and the stable pulse
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- execute and placeShape only use refs and the stable pulse
     }, []),
   );
 
@@ -668,6 +721,8 @@ export function Canvas() {
         ref={svgRef}
         className={`canvas mode-${mode} ${spaceHeld || panning ? 'panning' : tool !== 'draw' ? tool : ''}${shiftHeld && (tool === 'draw' || tool === 'select') ? ' shift-select' : ''}${menu && overMenu(menu) ? ' over-menu' : ''}`}
         onPointerDown={onPointerDown}
+        // The create tool's cursor shows the shape it will draw (see .canvas.create).
+        style={tool === 'create' ? ({ '--create-cursor': shapeCursor(createType) } as React.CSSProperties) : undefined}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerCancel}
@@ -687,6 +742,7 @@ export function Canvas() {
               pulse={s.id === pulseId}
             />
           ))}
+          {draft && <ShapeView shape={draft} zoom={view.zoom} interactive={false} />}
           {ghost && <GhostPreview result={ghost} color={currentColor} zoom={view.zoom} />}
           {stroke && (
             <polyline
@@ -711,7 +767,7 @@ export function Canvas() {
         )}
       </svg>
 
-      {shapes.length === 0 && !menu && !stroke && (
+      {shapes.length === 0 && !menu && !stroke && !draft && (
         <div className="empty-state">
           <div className="empty-title">Right-click or left-press-and-hold for the menu</div>
           <div className="empty-sub">
@@ -728,7 +784,7 @@ export function Canvas() {
         </div>
       )}
       <div className="status">
-        {statusText({ menu, spaceHeld: spaceHeld || panning, mode, selectionCount: selected.length, tool })}
+        {statusText({ menu, spaceHeld: spaceHeld || panning, mode, selectionCount: selected.length, tool, createType })}
       </div>
     </>
   );

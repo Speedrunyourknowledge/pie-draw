@@ -9,6 +9,9 @@ export const SHAPE_TYPES: readonly ShapeType[] = [
   'freehand',
 ];
 
+/** The shapes that can be created from the menu and drawn by dragging. */
+export type PrimitiveType = Exclude<ShapeType, 'freehand'>;
+
 export type Pt = [number, number];
 
 export interface BaseShape {

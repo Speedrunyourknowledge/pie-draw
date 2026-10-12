@@ -25,7 +25,8 @@ const KEYS: [string, string][] = [
   [`${kbd('mod+s')}  /  ${kbd('mod+shift+s')}`, 'Save / Save as'],
   [kbd('mod+o'), 'Open'],
   [kbd('mod+alt+n'), 'New document'],
-  ['Esc', 'Close menu or deselect'],
+  ['Enter', 'Place the shape chosen from the menu'],
+  ['Esc', 'Close menu, leave a tool, or deselect'],
   ['?', 'Show Help menu'],
 ];
 
@@ -70,6 +71,7 @@ export function HelpPanel() {
           <section>
             <h3>Draw and Edit</h3>
             <ul className="help-list">
+              <li><b>Choose a shape from the menu</b> and the pointer becomes a crosshair showing that shape. <b>Drag</b> to draw it at any size (Shift keeps the sides equal), or <b>click</b> to place it at a standard size.</li>
               <li><b>Click and drag on empty space</b> to sketch. Sketch a shape and a faded preview will appear if the shape is recognized.</li>
               <li><b>Click</b> a shape to select it, then <b>drag</b> to move it.</li>
               <li><b>Drag a corner or edge</b> of the selection box to scale (Shift keeps proportions), or <b>pinch</b> on a trackpad.</li>
