@@ -82,7 +82,7 @@ function segmentHitsRect(a: Pt, b: Pt, r: Bounds): boolean {
   return true;
 }
 
-function pointInPolygon([x, y]: Pt, poly: Pt[]): boolean {
+export function pointInPolygon([x, y]: Pt, poly: Pt[]): boolean {
   let inside = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
     const [xi, yi] = poly[i], [xj, yj] = poly[j];
@@ -264,4 +264,12 @@ export function dist(a: Pt, b: Pt): number {
 /** Squares and circles always scale uniformly so they keep their identity. */
 export function keepsAspect(s: Shape): boolean {
   return s.type === 'square' || s.type === 'circle';
+}
+
+/** Fits a stroke into a size×size box, keeping its proportions. */
+export function fitInBox(points: Pt[], size: number, pad: number): Pt[] {
+  const b = pointsBounds(points);
+  const k = (size - 2 * pad) / Math.max(b.maxX - b.minX, b.maxY - b.minY, 1);
+  const ox = (size - (b.maxX - b.minX) * k) / 2, oy = (size - (b.maxY - b.minY) * k) / 2;
+  return points.map(([x, y]) => [ox + (x - b.minX) * k, oy + (y - b.minY) * k]);
 }

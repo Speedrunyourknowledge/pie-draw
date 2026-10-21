@@ -139,10 +139,11 @@ interface StatusInput {
   selectionCount: number;
   tool: Tool;
   createType: PrimitiveType;
+  gesturesOn: boolean;
 }
 
 /** One line of context-sensitive guidance, so the available actions are never a mystery. */
-function statusText({ menu, mode, selectionCount, tool, createType }: StatusInput) {
+function statusText({ menu, mode, selectionCount, tool, createType, gesturesOn }: StatusInput) {
   if (menu) return 'Select an option · Click the center or outside the menu to cancel';
   if (mode === 'scaling') return 'Hold Shift to keep proportions';
   if (mode === 'selecting') return 'Every shape the box touches is selected · Release to finish';
@@ -159,6 +160,7 @@ function statusText({ menu, mode, selectionCount, tool, createType }: StatusInpu
   if (selectionCount > 0) {
     return `Drag to move · Drag edges or corners to scale · ${kbd('mod')}-click to add or remove · Right-click for more options`;
   }
+  if (!gesturesOn) return 'Gestures off: strokes stay as drawn · Right-click or left-press-and-hold for the menu';
   return 'Right-click or left-press-and-hold for the menu · Drag to draw · Shift-drag to select';
 }
 
@@ -171,6 +173,7 @@ export function Canvas() {
   const dropTargetId = useStore((s) => s.dropTargetId);
   const tool = useStore((s) => s.tool);
   const createType = useStore((s) => s.createType);
+  const gesturesOn = useStore((s) => s.gesturesOn);
 
   const svgRef = useRef<SVGSVGElement>(null);
   const gesture = useRef<Gesture>({ kind: 'none' });
@@ -312,7 +315,8 @@ export function Canvas() {
     if (points.length < 2) return;
     // What the ghost showed is what you get, unless the stroke ran on too far past its start.
     // The full stroke only decides when no ghost was up.
-    const result = overshot(points) ? null : (shown ?? recognize(points));
+    // With gestures off, every stroke stays exactly as drawn.
+    const result = !st.gesturesOn || overshot(points) ? null : (shown ?? recognize(points));
     if (result) {
       const shape = shapeFromRecognized(result, st.currentColor, st.currentFill);
       st.addShape(shape, false);
@@ -535,7 +539,7 @@ export function Canvas() {
         if (dist(w, g.points[g.points.length - 1]) * st.view.zoom < SAMPLE_PX) return;
         g.points.push(w);
         // Recognize at most once per frame, on the stroke as it is when the frame comes.
-        g.check ??= requestAnimationFrame(() => {
+        if (st.gesturesOn) g.check ??= requestAnimationFrame(() => {
           g.check = null;
           if (gesture.current !== g) return; // stroke already finished
           setGhost(overshot(g.points) ? g.tracker.clear() : g.tracker.update(recognize(g.points)));
@@ -784,7 +788,7 @@ export function Canvas() {
         </div>
       )}
       <div className="status">
-        {statusText({ menu, spaceHeld: spaceHeld || panning, mode, selectionCount: selected.length, tool, createType })}
+        {statusText({ menu, spaceHeld: spaceHeld || panning, mode, selectionCount: selected.length, tool, createType, gesturesOn })}
       </div>
     </>
   );

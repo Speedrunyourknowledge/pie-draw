@@ -2,16 +2,18 @@ import { useEffect } from 'react';
 import { Canvas } from './canvas/Canvas';
 import { useStore } from './store';
 import { ColorPicker } from './ui/ColorPicker';
+import { GestureGuide } from './ui/GestureGuide';
 import { HelpPanel } from './ui/HelpPanel';
 import { Toast } from './ui/Toast';
 import { TopBar } from './ui/TopBar';
 import { NavControls } from './ui/NavControls';
+import { RecordMode } from './ui/RecordMode';
 
 export default function App() {
   const fileName = useStore((s) => s.fileName);
   const dirty = useStore((s) => s.dirty);
   const menuOpen = useStore((s) => s.mode === 'menuOpen');
-  const helpOpen = useStore((s) => s.helpOpen);
+  const helpOpen = useStore((s) => s.helpOpen || s.gestureGuideOpen);
 
   useEffect(() => {
     document.title = `${dirty ? '• ' : ''}${fileName ?? 'Untitled'} — Pie Draw`;
@@ -30,7 +32,9 @@ export default function App() {
         <NavControls />
       </div>
       <HelpPanel />
+      <GestureGuide />
       <Toast />
+      <RecordMode />
     </div>
   );
 }

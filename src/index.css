@@ -545,3 +545,241 @@ svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo {
 /* .shape and .group-area are named to match the three-class tool rules above (hand, eraser, shift). */
 .canvas.mode-menuOpen *, .canvas.mode-menuOpen .shape, .canvas.mode-menuOpen .group-area { cursor: inherit; }
 .canvas.mode-menuOpen .handle:hover { fill: #fff; }
+
+/* ---- gesture record mode (hidden: ?record=1) ---- */
+.record {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: 210px 1fr;
+  grid-template-rows: 52px 1fr;
+  background: #f6f7f9;
+  font-size: 13px;
+}
+.record button {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--panel-line);
+  border-radius: 6px;
+  background: var(--panel);
+  cursor: pointer;
+}
+.record button:hover:not(:disabled) { background: #eef0f3; }
+.record button:disabled { opacity: 0.4; cursor: default; }
+.record button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.record button.primary:hover:not(:disabled) { background: #2f50c4; }
+.record-bar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 12px 0 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--panel-line);
+}
+.record-title { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; white-space: nowrap; }
+.rec-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--cancel); }
+.record-total { font-weight: 400; font-size: 13px; color: var(--muted); }
+.record-actions { display: flex; align-items: center; gap: 6px; }
+.rec-check { display: flex; align-items: center; gap: 4px; margin-right: 6px; color: var(--muted); cursor: pointer; }
+.record-labels {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 8px;
+  overflow-y: auto;
+  background: var(--panel);
+  border-right: 1px solid var(--panel-line);
+}
+.record .rec-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-color: transparent;
+  background: transparent;
+  text-align: left;
+}
+.record .rec-label.on { background: #e8edfc; color: var(--accent); font-weight: 600; }
+.rec-label.orphan span:first-child { text-decoration: line-through; color: var(--muted); }
+.rec-count {
+  min-width: 22px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #eef0f3;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+.rec-count.done { background: #dff3e8; color: #1e7b4f; }
+.rec-help { margin: auto 6px 4px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.record-main {
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  gap: 10px;
+  padding: 14px 16px 16px;
+  min-width: 0;
+  min-height: 0;
+}
+.rec-prompt { font-size: 15px; }
+.rec-prompt b { font-size: 18px; margin-right: 8px; }
+.rec-prompt span { color: var(--muted); }
+.rec-pad {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: #fff;
+  border: 1px solid var(--panel-line);
+  border-radius: 10px;
+  touch-action: none;
+  cursor: crosshair;
+}
+.rec-stroke, .rec-arrow { fill: none; stroke: var(--black); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.rec-arrow { stroke: var(--accent); }
+.rec-arrow.end { stroke: var(--muted); }
+.rec-start { fill: #30a46c; stroke: #fff; stroke-width: 1.5; }
+.rec-placeholder { fill: #b9bec6; font-size: 20px; text-anchor: middle; dominant-baseline: middle; pointer-events: none; }
+.rec-result { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 30px; }
+.rec-buttons { display: flex; gap: 6px; }
+.rec-next { color: var(--muted); }
+.rec-good { color: #1e7b4f; }
+.rec-bad { color: #c62a2f; }
+.rec-samples { display: flex; flex-wrap: wrap; gap: 8px; max-height: 196px; overflow-y: auto; }
+.rec-thumb {
+  position: relative;
+  margin: 0;
+  width: 80px;
+  padding: 4px 4px 2px;
+  background: #fff;
+  border: 1px solid var(--panel-line);
+  border-radius: 8px;
+  text-align: center;
+}
+.rec-thumb.bad { border-color: #e5484d; box-shadow: 0 0 0 1px #e5484d; }
+.rec-thumb svg { width: 72px; height: 72px; display: block; }
+.rec-thumb figcaption { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.record .rec-del {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0;
+}
+.rec-thumb:hover .rec-del { opacity: 1; }
+.record .rec-del:hover { background: #fbdcdc; color: #c62a2f; }
+
+/* ---- gesture mode switch (top bar) ---- */
+.topbar-actions .gesture-toggle { color: var(--muted); }
+.topbar-actions .gesture-toggle.on { color: var(--black); }
+.gesture-toggle .sparkle { opacity: 0; transition: opacity 120ms; }
+.gesture-toggle.on .sparkle { opacity: 1; stroke: var(--accent); }
+.gesture-toggle.on svg path:first-child { stroke: var(--accent); }
+.switch {
+  position: relative;
+  width: 26px;
+  height: 15px;
+  border-radius: 999px;
+  background: #cfd3d9;
+  transition: background 120ms;
+}
+.gesture-toggle.on .switch { background: var(--accent); }
+.knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(31, 41, 51, 0.25);
+  transition: transform 120ms;
+}
+.gesture-toggle.on .knob { transform: translateX(11px); }
+/* The switch track keeps the state readable when the label is hidden on narrow screens. */
+@media (max-width: 640px) {
+  .topbar-actions .gesture-toggle span.switch { display: inline-block; }
+}
+/* The info button belongs to the switch beside it, so it sits close and carries no label. */
+.topbar-actions .gesture-info { padding: 0 6px; margin-left: -2px; color: var(--muted); }
+.topbar-actions .gesture-info:hover { color: var(--accent); }
+
+/* ---- gesture reference (styled as a sibling of the help panel) ---- */
+.help-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-weight: 600;
+  cursor: pointer;
+}
+.help-link:hover { text-decoration: underline; }
+.guide-start {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #30a46c;
+  vertical-align: baseline;
+}
+.guide-note { color: var(--muted); font-size: 14px; }
+.guide-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 20px; }
+@media (max-width: 700px) { .guide-grid { grid-template-columns: 1fr; } }
+.guide-item { display: flex; align-items: center; gap: 12px; margin: 0; }
+.guide-thumb {
+  flex: none;
+  width: 64px;
+  height: 64px;
+  border: 1px solid var(--panel-line);
+  border-radius: 8px;
+  background: #fff;
+}
+.guide-thumb.missing {
+  display: grid;
+  place-items: center;
+  border-style: dashed;
+  color: #b9bec6;
+  font-size: 11px;
+  text-align: center;
+}
+.guide-target { fill: none; stroke: #c3c8cf; stroke-width: 1.5; }
+.guide-item figcaption { display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
+.guide-item figcaption span { color: var(--muted); font-size: 13px; }
+.guide-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 6px;
+  border-radius: 50%;
+  vertical-align: -1px;
+}
+/* The sample the gesture reference shows; ★ pins one, otherwise the most typical one is used. */
+.rec-thumb.shown:not(.bad) { border-color: var(--accent); }
+.rec-example { color: var(--accent); }
+.record .rec-star {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0;
+}
+.rec-thumb:hover .rec-star, .record .rec-star.on { opacity: 1; }
+.record .rec-star.on { color: #f5a524; }
+.record .rec-star:hover { background: #fdf3df; color: #f5a524; }

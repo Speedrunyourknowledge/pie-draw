@@ -16,9 +16,18 @@ export function useKeyboard(onEscape: () => void, onMenuKey: (e: KeyboardEvent) 
       const key = e.key.toLowerCase();
       let handled = true;
 
+      if (st.recordOpen) return; // record mode handles its own keys
+
       if (st.helpOpen) {
         // The help panel only listens for ways to close it.
         if (key === 'escape' || key === '?') st.setHelpOpen(false);
+        else handled = false;
+        if (handled) e.preventDefault();
+        return;
+      }
+      if (st.gestureGuideOpen) {
+        // Likewise the gesture reference.
+        if (key === 'escape') st.setGestureGuideOpen(false);
         else handled = false;
         if (handled) e.preventDefault();
         return;
@@ -59,6 +68,7 @@ export function useKeyboard(onEscape: () => void, onMenuKey: (e: KeyboardEvent) 
       else if (key === 'v') st.setTool(st.tool === 'select' ? 'draw' : 'select');
       else if (key === 'h') st.setTool(st.tool === 'hand' ? 'draw' : 'hand');
       else if (key === 'e') st.setTool(st.tool === 'eraser' ? 'draw' : 'eraser');
+      else if (key === 'g') st.setGesturesOn(!st.gesturesOn);
       // Shift+digit (matched by physical key, since Shift changes e.key) sets the fill; 0 clears it.
       else if (e.shiftKey && /^Digit[0-5]$/.test(e.code)) {
         const n = Number(e.code.slice(5));

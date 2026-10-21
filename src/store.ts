@@ -27,6 +27,15 @@ export const MAX_ZOOM = 8;
 const HOME_VIEW: View = { x: 0, y: 0, zoom: 1 };
 
 const PASTE_OFFSET = 20;
+const GESTURES_KEY = 'pie-draw:gestures';
+
+function readGesturesOn(): boolean {
+  try {
+    return localStorage.getItem(GESTURES_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
 const HISTORY_LIMIT = 100;
 
 interface AppState {
@@ -44,6 +53,9 @@ interface AppState {
   toast: Toast | null;
   view: View; // not part of the document or the undo history
   helpOpen: boolean;
+  gestureGuideOpen: boolean; // the gesture reference panel
+  recordOpen: boolean;
+  gesturesOn: boolean; // off: every stroke stays freehand (no recognizer, no shape snapping) // hidden gesture record mode (?record=1)
   dropTargetId: string | null; // shape under a color being dragged from the dock
   tool: Tool;
   createType: PrimitiveType; // the shape the create tool draws
@@ -94,6 +106,9 @@ interface AppState {
   panBy: (dx: number, dy: number) => void;
   setView: (view: View) => void;
   setHelpOpen: (open: boolean) => void;
+  setGestureGuideOpen: (open: boolean) => void;
+  setRecordOpen: (open: boolean) => void;
+  setGesturesOn: (on: boolean) => void;
   setMode: (mode: Mode) => void;
   showToast: (text: string, kind?: Toast['kind']) => void;
 }
@@ -142,6 +157,9 @@ export const useStore = create<AppState>()((set, get) => {
     toast: null,
     view: HOME_VIEW,
     helpOpen: false,
+    gestureGuideOpen: false,
+    recordOpen: new URLSearchParams(location.search).has('record'),
+    gesturesOn: readGesturesOn(),
     dropTargetId: null,
     tool: 'draw',
     createType: 'square',
@@ -327,7 +345,29 @@ export const useStore = create<AppState>()((set, get) => {
 
     setView: (view) => set({ view }),
 
-    setHelpOpen: (helpOpen) => set({ helpOpen }),
+    // Help and the gesture reference replace each other, so only one panel is ever open.
+    setHelpOpen: (helpOpen) => set({ helpOpen, gestureGuideOpen: false }),
+
+    setGestureGuideOpen: (gestureGuideOpen) => set({ gestureGuideOpen, helpOpen: false }),
+
+    setGesturesOn: (gesturesOn) => {
+      try {
+        localStorage.setItem(GESTURES_KEY, gesturesOn ? '1' : '0');
+      } catch {
+        // Storage unavailable: the setting just won't survive a reload.
+      }
+      set({ gesturesOn });
+      get().showToast(gesturesOn ? 'Gestures on' : 'Gestures off · Strokes stay as drawn');
+    },
+
+    setRecordOpen: (recordOpen) => {
+      // Mirrored in the URL (?record=1), so a reload or a dev-server reload after saving stays in record mode.
+      const url = new URL(location.href);
+      if (recordOpen) url.searchParams.set('record', '1');
+      else url.searchParams.delete('record');
+      history.replaceState(null, '', url);
+      set({ recordOpen, helpOpen: false, gestureGuideOpen: false });
+    },
 
     newDoc: () =>
       set({
