@@ -27,6 +27,15 @@ export const MAX_ZOOM = 8;
 const HOME_VIEW: View = { x: 0, y: 0, zoom: 1 };
 
 const PASTE_OFFSET = 20;
+const GESTURES_KEY = 'pie-draw:gestures';
+
+function readGesturesOn(): boolean {
+  try {
+    return localStorage.getItem(GESTURES_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
 const HISTORY_LIMIT = 100;
 
 interface AppState {
@@ -44,6 +53,11 @@ interface AppState {
   toast: Toast | null;
   view: View; // not part of the document or the undo history
   helpOpen: boolean;
+  gestureGuideOpen: boolean; // the gesture reference panel
+  /** The open panel replaced the other one directly, so its backdrop is already showing and shouldn't fade in. */
+  panelSwapped: boolean;
+  recordOpen: boolean;
+  gesturesOn: boolean; // off: every stroke stays freehand (no recognizer, no shape snapping) // hidden gesture record mode (RECORD_MODE=true)
   dropTargetId: string | null; // shape under a color being dragged from the dock
   tool: Tool;
   createType: PrimitiveType; // the shape the create tool draws
@@ -64,6 +78,8 @@ interface AppState {
   toggleSelect: (id: string) => void;
   selectAll: () => void;
   deleteSelected: () => void;
+  /** Removes these shapes as one undo step. */
+  deleteShapes: (ids: string[]) => void;
   copy: () => void;
   cut: () => void;
   /** Pastes the clipboard centered at `at`, or offset from the last copy/paste when omitted. */
@@ -94,6 +110,9 @@ interface AppState {
   panBy: (dx: number, dy: number) => void;
   setView: (view: View) => void;
   setHelpOpen: (open: boolean) => void;
+  setGestureGuideOpen: (open: boolean) => void;
+  setRecordOpen: (open: boolean) => void;
+  setGesturesOn: (on: boolean) => void;
   setMode: (mode: Mode) => void;
   showToast: (text: string, kind?: Toast['kind']) => void;
 }
@@ -142,6 +161,10 @@ export const useStore = create<AppState>()((set, get) => {
     toast: null,
     view: HOME_VIEW,
     helpOpen: false,
+    gestureGuideOpen: false,
+    panelSwapped: false,
+    recordOpen: import.meta.env.RECORD_MODE === true,
+    gesturesOn: readGesturesOn(),
     dropTargetId: null,
     tool: 'draw',
     createType: 'square',
@@ -184,6 +207,12 @@ export const useStore = create<AppState>()((set, get) => {
         shapes: st.shapes.filter((s) => s.id !== id),
         selectedIds: st.selectedIds.filter((x) => x !== id),
       })),
+
+    deleteShapes: (ids) => {
+      if (ids.length === 0) return;
+      const { shapes, selectedIds } = get();
+      change({ shapes: shapes.filter((s) => !ids.includes(s.id)), selectedIds: selectedIds.filter((x) => !ids.includes(x)) });
+    },
 
     deleteSelected: () => {
       const { selectedIds, shapes } = get();
@@ -327,7 +356,25 @@ export const useStore = create<AppState>()((set, get) => {
 
     setView: (view) => set({ view }),
 
-    setHelpOpen: (helpOpen) => set({ helpOpen }),
+    // Help and the gesture reference replace each other, so only one panel is ever open.
+    setHelpOpen: (helpOpen) => set((st) => ({ helpOpen, gestureGuideOpen: false, panelSwapped: helpOpen && st.gestureGuideOpen })),
+
+    setGestureGuideOpen: (gestureGuideOpen) => set((st) => ({ gestureGuideOpen, helpOpen: false, panelSwapped: gestureGuideOpen && st.helpOpen })),
+
+    setGesturesOn: (gesturesOn) => {
+      try {
+        localStorage.setItem(GESTURES_KEY, gesturesOn ? '1' : '0');
+      } catch {
+        // Storage unavailable: the setting just won't survive a reload.
+      }
+      set({ gesturesOn });
+      get().showToast(gesturesOn ? 'Gestures on' : 'Gestures off · Strokes stay as drawn');
+    },
+
+    setRecordOpen: (recordOpen) => {
+      // A reload (or a dev-server reload after saving) reopens record mode while RECORD_MODE=true.
+      set({ recordOpen, helpOpen: false, gestureGuideOpen: false });
+    },
 
     newDoc: () =>
       set({

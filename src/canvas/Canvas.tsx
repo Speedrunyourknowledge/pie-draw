@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import simplify from 'simplify-js';
-import { STROKE_WIDTH, dist, groupBounds, keepsAspect, makeFreehand, makePrimitive, makePrimitiveInBox, shapeTouchesRect, worldBounds, type Bounds } from '../geometry';
+import { STROKE_WIDTH, canFill, dist, groupBounds, keepsAspect, makeFreehand, makePrimitive, makePrimitiveInBox, pointsBounds, shapeInLasso, shapeNearPoint, shapeTouchesRect, worldBounds, type Bounds } from '../geometry';
+import { describeAction, gestureFor, type GestureAction } from '../gestures/gestureConfig';
+import { CUSP_SPAN_PX, SCRIBBLE_HIT_PX, isScribble } from '../gestures/heuristics';
 import { PieMenu } from '../interaction/PieMenu';
 import {
   DEAD_ZONE,
@@ -13,7 +15,7 @@ import {
   type PieSelection,
 } from '../interaction/pieGeometry';
 import { menuFor, type PieItem } from '../interaction/pieMenuConfig';
-import { GhostTracker, overshot, recognize, shapeFromRecognized, type Recognized } from '../interaction/recognize';
+import { GhostTracker, interpret, overshot, shapeFromRecognized, type Recognized } from '../interaction/recognize';
 import { useStore, type Tool } from '../store';
 import type { PrimitiveType, Pt, Shape, TransformPatch } from '../types';
 import { useKeyboard } from '../useKeyboard';
@@ -34,6 +36,9 @@ type Gesture =
   | { kind: 'none' }
   // additive: Shift or Cmd/Ctrl held, so a click toggles the shape and a drag adds a box to the selection.
   | { kind: 'press'; start: Pt; screen: Pt; shapeId: string | null; additive: boolean }
+  // A press on an unselected shape while drawing with gestures: a drag draws a stroke over it (so a
+  // color gesture can fill it), and only a click selects it.
+  | { kind: 'strokeOver'; start: Pt; screen: Pt; shapeId: string }
   // In the hand, eraser or create tool: a drag pans, erases or draws the shape, a hold opens the
   // menu, a click erases or places the shape at its default size.
   | { kind: 'toolPress'; tool: 'hand' | 'eraser' | 'create'; start: Pt; screen: Pt; client: { x: number; y: number } }
@@ -171,6 +176,7 @@ export function Canvas() {
   const dropTargetId = useStore((s) => s.dropTargetId);
   const tool = useStore((s) => s.tool);
   const createType = useStore((s) => s.createType);
+  const gesturesOn = useStore((s) => s.gesturesOn);
 
   const svgRef = useRef<SVGSVGElement>(null);
   const gesture = useRef<Gesture>({ kind: 'none' });
@@ -183,6 +189,7 @@ export function Canvas() {
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [stroke, setStroke] = useState<Pt[] | null>(null);
   const [ghost, setGhost] = useState<Recognized | null>(null);
+  const [lassoHits, setLassoHits] = useState<Shape[] | null>(null); // while the stroke reads as a lasso: what it would select
   const [draft, setDraft] = useState<Shape | null>(null); // shape being dragged out with the create tool
   const [pulseId, setPulseId] = useState<string | null>(null);
   const [spaceHeld, setSpaceHeld] = useState(false);
@@ -309,10 +316,40 @@ export function Canvas() {
     const st = useStore.getState();
     setStroke(null);
     setGhost(null);
+    setLassoHits(null);
     if (points.length < 2) return;
+    // A scribble over shapes erases them. One that touches no shape falls through like any stroke.
+    if (st.gesturesOn && isScribble(points, CUSP_SPAN_PX / st.view.zoom)) {
+      const tol = SCRIBBLE_HIT_PX / st.view.zoom;
+      const hit = st.shapes.filter((s) => points.some((p) => shapeNearPoint(s, p, tol))).map((s) => s.id);
+      if (hit.length > 0) {
+        st.deleteShapes(hit);
+        st.select(null);
+        st.showToast(`Erased ${hit.length === 1 ? '1 shape' : `${hit.length} shapes`} · ${kbd('mod+z')} to undo`);
+        return;
+      }
+    }
+    // A stroke the ghost showed as a shape is that shape; otherwise the recognizer decides.
+    const it = st.gesturesOn && !shown ? interpret(points) : null;
+    const action = it && gestureFor(it.gesture)?.action;
+    // A lasso selects the shapes whose center is inside it, replacing the selection, even when that's
+    // none. Running on past the start is fine for a lasso, so the overshoot rule below doesn't apply.
+    if (action?.kind === 'lasso') {
+      const hit = st.shapes.filter((s) => shapeInLasso(s, points)).map((s) => s.id);
+      st.setSelection(hit);
+      st.showToast(
+        hit.length > 0
+          ? `Selected ${hit.length === 1 ? '1 shape' : `${hit.length} shapes`} · drag to move, handles to scale`
+          : 'Lasso: nothing selected',
+      );
+      return;
+    }
+    if (action && action.kind !== 'createShape' && runCommand(action, points)) return;
     // What the ghost showed is what you get, unless the stroke ran on too far past its start.
     // The full stroke only decides when no ghost was up.
-    const result = overshot(points) ? null : (shown ?? recognize(points));
+    // With gestures off, every stroke stays exactly as drawn.
+    const result = !st.gesturesOn || overshot(points) ? null : (shown ?? it?.shape ?? null);
+    st.select(null); // not a command, so like any drawing it ends the selection
     if (result) {
       const shape = shapeFromRecognized(result, st.currentColor, st.currentFill);
       st.addShape(shape, false);
@@ -323,6 +360,55 @@ export function Canvas() {
       (q) => [q.x, q.y] as Pt,
     );
     st.addShape(makeFreehand(simplified, st.currentColor), false);
+  };
+
+  /**
+   * Carries out an edit or color gesture. Returns false when there is nothing for it to act on, after
+   * saying so, and the stroke then stays as drawn: it may well have been meant as a line.
+   */
+  const runCommand = (action: GestureAction, points: Pt[]): boolean => {
+    const st = useStore.getState();
+    const count = (n: number) => (n === 1 ? '1 shape' : `${n} shapes`);
+    switch (action.kind) {
+      case 'copy':
+      case 'cut': {
+        const n = st.selectedIds.length;
+        const verb = action.kind === 'copy' ? 'Copy' : 'Cut';
+        if (n === 0) {
+          st.showToast(`${verb}: nothing selected · lasso shapes first`);
+          return false;
+        }
+        st[action.kind]();
+        st.showToast(action.kind === 'copy' ? `Copied ${count(n)}` : `Cut ${count(n)} · ${kbd('mod+z')} to undo`);
+        return true;
+      }
+      case 'paste': {
+        if (!st.clipboard) {
+          st.showToast('Paste: nothing copied · copy or cut shapes first');
+          return false;
+        }
+        // Centered where the caret was drawn.
+        const b = pointsBounds(points);
+        st.paste({ x: (b.minX + b.maxX) / 2, y: (b.minY + b.maxY) / 2 });
+        st.showToast(`Pasted ${count(st.clipboard.length)}`);
+        return true;
+      }
+      case 'setColor': {
+        const name = describeAction(action);
+        // Started inside an unselected shape: fill it (the topmost one there).
+        const target = st.shapes.findLast((s) => canFill(s) && !st.selectedIds.includes(s.id) && shapeNearPoint(s, points[0], 0));
+        if (target) {
+          st.refill(target.id, action.color);
+          st.showToast(`Fill: ${name}`);
+          pulse(target.id);
+        } else {
+          st.setColor(action.color);
+          st.showToast(st.selectedIds.length > 0 ? `Line color: ${name}` : `Line color for new shapes: ${name}`);
+        }
+        return true;
+      }
+    }
+    return false;
   };
 
   // ---- create tool ----
@@ -419,6 +505,13 @@ export function Canvas() {
       gesture.current = { kind: 'press', start: w, screen: p, shapeId, additive };
       return;
     }
+    // Drawing with gestures, a stroke may be a command on the selection, so a press only changes the
+    // selection once it turns out to be a click. Strokes that end up as shapes or ink clear it then.
+    if (st.tool === 'draw' && st.gesturesOn && (!shapeId || !st.selectedIds.includes(shapeId))) {
+      gesture.current = shapeId ? { kind: 'strokeOver', start: w, screen: p, shapeId } : { kind: 'press', start: w, screen: p, shapeId, additive };
+      startHold(p, shapeId);
+      return;
+    }
     // Pressing a shape that is already selected keeps the whole selection, so it can be dragged.
     if (!shapeId || !st.selectedIds.includes(shapeId)) st.select(shapeId);
     gesture.current = { kind: 'press', start: w, screen: p, shapeId, additive };
@@ -484,6 +577,13 @@ export function Canvas() {
         }
         onPointerMove(e);
         return;
+      case 'strokeOver':
+        if (dist(p, g.screen) < MOVE_THRESHOLD) return;
+        clearTimer();
+        gesture.current = { kind: 'draw', points: [g.start], check: null, tracker: new GhostTracker() };
+        st.setMode('drawing');
+        onPointerMove(e);
+        return;
       case 'press': {
         if (dist(p, g.screen) < MOVE_THRESHOLD) return;
         clearTimer();
@@ -535,10 +635,13 @@ export function Canvas() {
         if (dist(w, g.points[g.points.length - 1]) * st.view.zoom < SAMPLE_PX) return;
         g.points.push(w);
         // Recognize at most once per frame, on the stroke as it is when the frame comes.
-        g.check ??= requestAnimationFrame(() => {
+        if (st.gesturesOn) g.check ??= requestAnimationFrame(() => {
           g.check = null;
           if (gesture.current !== g) return; // stroke already finished
-          setGhost(overshot(g.points) ? g.tracker.clear() : g.tracker.update(recognize(g.points)));
+          const it = interpret(g.points);
+          setGhost(overshot(g.points) ? g.tracker.clear() : g.tracker.update(it?.shape ?? null));
+          // A recognized lasso is tinted, with the shapes it would select outlined.
+          setLassoHits(it?.gesture === 'lasso' ? useStore.getState().shapes.filter((s) => shapeInLasso(s, g.points)) : null);
         });
         setStroke(g.points.slice());
         return;
@@ -555,8 +658,12 @@ export function Canvas() {
       case 'press': {
         // A click (no drag) with a modifier toggles the shape.
         if (g.additive && g.shapeId) useStore.getState().toggleSelect(g.shapeId);
+        else if (!g.shapeId) useStore.getState().select(null); // a click on empty canvas
         break;
       }
+      case 'strokeOver':
+        useStore.getState().select(g.shapeId); // a click selects it
+        break;
       case 'toolPress':
         if (g.tool === 'eraser') {
           startErase(g.client.x, g.client.y); // a click erases the shape under it
@@ -591,6 +698,7 @@ export function Canvas() {
     setStroke(null);
     setMarquee(null);
     setGhost(null);
+    setLassoHits(null);
     setDraft(null);
     closeMenu();
   };
@@ -719,7 +827,7 @@ export function Canvas() {
     <>
       <svg
         ref={svgRef}
-        className={`canvas mode-${mode} ${spaceHeld || panning ? 'panning' : tool !== 'draw' ? tool : ''}${shiftHeld && (tool === 'draw' || tool === 'select') ? ' shift-select' : ''}${menu && overMenu(menu) ? ' over-menu' : ''}`}
+        className={`canvas mode-${mode} ${spaceHeld || panning ? 'panning' : tool !== 'draw' ? tool : ''}${shiftHeld && (tool === 'draw' || tool === 'select') ? ' shift-select' : ''}${gesturesOn && tool === 'draw' ? ' gestures' : ''}${menu && overMenu(menu) ? ' over-menu' : ''}`}
         onPointerDown={onPointerDown}
         // The create tool's cursor shows the shape it will draw (see .canvas.create).
         style={tool === 'create' ? ({ '--create-cursor': shapeCursor(createType) } as React.CSSProperties) : undefined}
@@ -744,6 +852,7 @@ export function Canvas() {
           ))}
           {draft && <ShapeView shape={draft} zoom={view.zoom} interactive={false} />}
           {ghost && <GhostPreview result={ghost} color={currentColor} zoom={view.zoom} />}
+          {lassoHits && stroke && <polygon className="lasso-fill" points={stroke.map((q) => q.join(',')).join(' ')} />}
           {stroke && (
             <polyline
               className="live-stroke"
@@ -753,10 +862,13 @@ export function Canvas() {
             />
           )}
         </g>
-        {/* While a box is being dragged, only outline what it touches; the group box comes on release. */}
-        {selected.length > 0 && mode !== 'drawing' && (
+        {/* While a box is being dragged, only outline what it touches; the group box comes on release.
+            It stays up while drawing, since a gesture stroke (copy, cut, color...) acts on it, but not
+            while the create tool drags out a new shape. */}
+        {selected.length > 0 && !(mode === 'drawing' && tool === 'create') && (
           <SelectionHandles shapes={selected} view={view} preview={mode === 'selecting'} />
         )}
+        {lassoHits && lassoHits.length > 0 && <SelectionHandles shapes={lassoHits} view={view} preview />}
         {marquee && (() => {
           const [x0, y0] = toScreen([marquee.minX, marquee.minY], view);
           const [x1, y1] = toScreen([marquee.maxX, marquee.maxY], view);
