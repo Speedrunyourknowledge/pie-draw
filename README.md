@@ -35,7 +35,7 @@ Right-click, or left-press-and-hold for ~300 ms, to open a radial menu centered 
 
 ### Gestures
 
-With **Gestures** on (top bar switch, or **G**), single strokes drawn on the canvas act as commands. *(In progress: the shape gestures, lasso and scribble erase work; templates for the other gestures are still being recorded, so they are not yet connected to their actions.)*
+With **Gestures** on (top bar switch, or **G**), single strokes drawn on the canvas act as commands.
 
 | Action | Gesture |
 |---|---|
@@ -52,6 +52,8 @@ With **Gestures** on (top bar switch, or **G**), single strokes drawn on the can
 - **Gesture reference.** The help panel links to a reference of every gesture, illustrated with a recorded example showing where it starts and which way it goes.
 - **Shapes snap to clean primitives.** A shape gesture becomes that shape, sized to the stroke; near-equal sides make a square or circle. A faded preview shows the result while drawing.
 - **Lasso select.** Shapes whose center is inside the loop are selected, ready to drag or scale with the handles. While drawing, a recognized lasso is tinted and the shapes it would select are outlined. A lasso around no shapes clears the selection and says nothing was selected.
+- **Copy, cut and paste.** Copy and cut act on the selection; paste puts the clipboard centered where the caret was drawn. With nothing selected or nothing copied, the app says so and the stroke stays as drawn, since it may have been meant as a line.
+- **Colors.** A number started inside an unselected shape fills it. Started elsewhere, it sets the line color of the selection, or with nothing selected, of new shapes. While drawing with gestures on, dragging across an unselected shape draws a stroke instead of moving it; a click still selects it, and a selected shape still drags.
 - **Scribble erase.** Scribbling over shapes deletes every shape the stroke touches, as one undoable step. A scribble over empty canvas stays an ordinary stroke.
 - **Record mode** (`RECORD_MODE=true npm run dev`) is a hidden developer screen for recording gesture samples, either as templates or as test strokes used only to measure accuracy.
 
@@ -105,14 +107,21 @@ Saving and opening files can be done through the **File** menu in the toolbar. D
 
 **Recognizer plus heuristics.** The Penny Pincher recognizer ([Taranta & LaViola, 2015](#references)) is implemented by hand from the paper's pseudocode, without libraries, in `src/gestures/recognizer.ts`. It resamples a stroke into 32 evenly spaced points, takes the 31 unit vectors between them, and picks the template whose vectors have the highest summed dot product with the stroke's. Unlike the paper, the stroke's vectors are also normalized and the sum is averaged, so the score is a mean cosine between −1 and 1; strokes scoring below 0.85 against every template are rejected as not a gesture. Heuristics may only *reject* its proposal or *refine* it within its family (for example, rectangle → square); if the best proposal is rejected, the next one above the reject threshold is tried. A heuristic never swaps in a different gesture, so the recognizer remains the real classifier. The app's original freehand snap-to-shape code was kept and refactored into this heuristic layer.
 
-**What the heuristics check.** Only what the recognizer cannot see: whether the stroke closes, how far it runs on, its size, and its corners. Corner count separates the shapes cleanly in the recorded strokes (rectangles 4, triangles 3, circles 6 or more), which settles the near-ties between them. Rectangles and ovals are measured along their own axes, so a slightly tilted one snaps to an upright shape of the right size. A lasso must be closed, counterclockwise, and fill at least 80% of its convex hull: wobbles and slight dents are fine, but a freeform outline such as a bean can't be covered by templates, so deep dents are ruled out.
+**What the heuristics check.** Only what the recognizer cannot see: whether the stroke closes, how far it runs on, its size, and its corners. Corner count separates the shapes cleanly in the recorded strokes (rectangles 4, triangles 3, circles 6 or more), which settles the near-ties between them. Rectangles and ovals are measured along their own axes, so a slightly tilted one snaps to an upright shape of the right size. A lasso must be closed, counterclockwise, and fill at least 80% of its convex hull: wobbles and slight dents are fine, but a freeform outline such as a bean can't be covered by templates, so deep dents are ruled out. A cut must slant between 20° and 80° from horizontal (the recorded ones slant 36°–73°), so ordinary flat and upright lines stay lines. A paste caret must have a sharp tip, which separates it from a rounded U.
 
 **Scribble erase is heuristic-only.** A scribble's shape varies too much for templates, so it is detected directly: enough sharp direction reversals, over at least one shape. It runs before the recognizer.
 
-**Generating templates from fewer samples.** Penny Pincher is sensitive to start point, drawing direction and rotation. Rather than recording every variation, each recorded sample generates extra templates, chosen per gesture:
-- **Either direction** (cut, paste): also added reversed.
-- **Any start point** (rectangle, ellipse, triangle, lasso): also started from 8 points around the loop.
-- **Any rotation** (rectangle, ellipse, triangle, lasso): also turned 90°, 180° and 270°. Direction is kept, so circle and lasso stay apart.
+**Generating templates from fewer samples.** Penny Pincher is sensitive to start point, drawing direction and rotation. Rather than recording every variation, each recorded sample generates extra templates, chosen per gesture. A direction-invariant sample is also added reversed; a start-invariant one is also started from 8 points around the loop.
+
+| Gesture | Direction-invariant | Start-invariant |
+|---|---|---|
+| Rectangle, ellipse, triangle | No (clockwise) | Yes |
+| Lasso | No (counterclockwise) | Yes |
+| Copy | No | No |
+| Cut, paste | Yes | No |
+| Colors 1–5 | No | No |
+
+Shapes and the lasso are also **rotation-invariant**: each sample is also turned 90°, 180° and 270°. Direction is kept, so circle and lasso stay apart.
 
 Measured on the loop gestures, with 10 templates and 5 separate test strokes each (time per stroke, in Node on a laptop):
 
@@ -123,6 +132,17 @@ Measured on the loop gestures, with 10 templates and 5 separate test strokes eac
 | Any start point + any rotation | 1,280 | 0.13 ms | 20 / 20 of 20 | 36 / 40 of 40 |
 
 The copies cost about a tenth of a millisecond per stroke and fix the misses caused by start point and orientation. The heuristics fix the rest: rectangles and triangles with soft corners that score slightly higher as circles. This matches the Penny Pincher paper, where accuracy kept improving as templates were added, and which notes that the recognizer is not rotation invariant but that more templates cover that variation.
+
+Measured on the full set of 12 gestures, with 10 templates (1,380 including generated ones) and 5 separate test strokes each:
+
+| Gestures | Test strokes correct (recognizer / with heuristics) |
+|---|---|
+| Shapes and lasso | 20 / 20 of 20 |
+| Copy, cut, paste | 15 / 15 of 15 |
+| Colors 1–5 | 25 / 25 of 25 |
+| Overall | 60 / 60 of 60 |
+
+Time per stroke: 0.13 ms for the recognizer, 0.14 ms with heuristics.
 
 **Training data.** Each gesture has 10 recorded templates (`src/gestures/templates.json`) and 5 separate test strokes (`src/gestures/holdout.json`) that are never used as templates; `npm run eval` reports accuracy on them. Templates store raw stroke points, not precomputed vectors, so the recognizer's settings can change without re-recording. The reference pictures are computed when templates are saved, so normal use does no extra work at startup.
 
@@ -136,6 +156,10 @@ The copies cost about a tenth of a millisecond per stroke and fix the misses cau
 - **Drawing capabilities.** One stroke width, a fixed five-color palette, no command to create straight lines.
 - **Erasing.** There is no pixel-level erasing, by design.
 - **Export and persistence.** No PNG/SVG export, no autosave.
+
+## AI Assistance
+
+*To be completed.*
 
 ## References
 

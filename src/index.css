@@ -61,6 +61,8 @@ svg.canvas.eraser .shape.erase-target .halo, svg.canvas.eraser .shape.erase-targ
 .shape .halo { display: none; }
 .shape:hover .halo { display: inline; }
 .canvas.mode-drawing .shape, .canvas.mode-menuOpen .shape { cursor: inherit; }
+/* Drawing with gestures, a drag over an unselected shape is a stroke (a color gesture fills it). */
+.canvas.gestures .shape:not(.selected) { cursor: inherit; }
 .canvas.mode-drawing .shape:hover .halo, .canvas.mode-menuOpen .shape:hover .halo { display: none; }
 
 .pulse {

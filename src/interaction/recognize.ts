@@ -1,5 +1,5 @@
 import { centerPoints, newId, paint, pointsBounds } from '../geometry';
-import { gestureFor } from '../gestures/gestureConfig';
+import { gestureFor, type GestureAction } from '../gestures/gestureConfig';
 import {
   closedPart,
   convexity,
@@ -30,6 +30,9 @@ const MAX_OVAL_TILT = (30 * Math.PI) / 180; // an oval leaning further than this
 const LASSO_GAP = 0.3; // how close a lasso must come back to its start, as a fraction of the bbox diagonal
 const LASSO_CONVEXITY = 0.8; // loop area over convex hull area: slight dents pass, bean shapes don't
 const RIGHT_ANGLE_SLACK = (30 * Math.PI) / 180; // how far a rectangle's corners may be from 90°
+const SLASH_MIN = (20 * Math.PI) / 180; // a cut slash's slope from horizontal; recorded ones are 36°–73°
+const SLASH_MAX = (80 * Math.PI) / 180;
+const CARET_TURN = (40 * Math.PI) / 180; // a paste caret's tip; recorded ones turn 57° or more, a U about 12°
 
 /** True once a stroke has come back to its start and then run on too far past it. */
 export function overshot(stroke: Pt[]): boolean {
@@ -61,9 +64,7 @@ export function interpret(stroke: Pt[], templates: readonly Template[] = recorde
       loop ??= closedLoop(stroke);
       const shape = loop && SHAPES[action.family](loop);
       if (shape) return { gesture: m.label, shape };
-    } else if (action?.kind === 'lasso') {
-      if (isLasso(stroke)) return { gesture: m.label };
-    } else return { gesture: m.label }; // the other gestures have no heuristics
+    } else if (!action || (CHECKS[action.kind]?.(stroke) ?? true)) return { gesture: m.label };
   }
   return null;
 }
@@ -90,6 +91,33 @@ export function isLasso(stroke: Pt[]): boolean {
   if (isClockwise(points)) return false;
   return convexity(points) >= LASSO_CONVEXITY;
 }
+
+/**
+ * A cut is a forward slash: rising to the right (drawn either way) at a clear slant. Straight lines
+ * are common in drawings, so flat and upright ones stay freehand even when they score as a cut.
+ */
+export function isSlash(stroke: Pt[]): boolean {
+  const [a, b] = [stroke[0], stroke[stroke.length - 1]];
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  if (Math.hypot(dx, dy) < MIN_DIAG || dx * dy >= 0) return false; // too short, or not rising to the right
+  const slope = Math.atan2(Math.abs(dy), Math.abs(dx));
+  return slope >= SLASH_MIN && slope <= SLASH_MAX;
+}
+
+/** A paste caret has a sharp tip, which a rounded U, also close to it for the recognizer, lacks. */
+export function isCaret(stroke: Pt[]): boolean {
+  const b = pointsBounds(stroke);
+  const diag = Math.hypot(b.maxX - b.minX, b.maxY - b.minY);
+  if (diag < MIN_DIAG) return false;
+  return sharpestTurn(movingAverage(stroke, 2), Math.max(10, diag * 0.08)) >= CARET_TURN;
+}
+
+/** Heuristic checks for the non-shape gestures that have one; the rest are taken as recognized. */
+const CHECKS: Partial<Record<GestureAction['kind'], (stroke: Pt[]) => boolean>> = {
+  lasso: isLasso,
+  cut: isSlash,
+  paste: isCaret,
+};
 
 /** The stroke without any overshoot, if it is big enough and closes like a shape should; else null. */
 function closedLoop(stroke: Pt[]): Loop | null {

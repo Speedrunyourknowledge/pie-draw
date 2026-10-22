@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import holdoutData from '../gestures/holdout.json';
 import { parseTemplateFile, sampleTemplates } from '../gestures/templates';
 import type { Pt } from '../types';
-import { gestureOf, isLasso, recognize } from './recognize';
+import { gestureOf, isCaret, isLasso, isSlash, recognize } from './recognize';
 
 /** A closed polyline through the corners with `per` points on each edge. */
 function loop(corners: Pt[], per = 20): Pt[] {
@@ -119,3 +119,28 @@ describe('lasso', () => {
   });
 });
 
+
+describe('cut and paste', () => {
+  const line = (a: Pt, b: Pt): Pt[] => Array.from({ length: 40 }, (_, i) => [a[0] + ((b[0] - a[0]) * i) / 39, a[1] + ((b[1] - a[1]) * i) / 39] as Pt);
+  /** A line `deg` degrees above horizontal, drawn to the right. */
+  const slant = (deg: number) => line([0, 0], [200 * Math.cos((deg * Math.PI) / 180), -200 * Math.sin((deg * Math.PI) / 180)]);
+
+  it('takes a forward slash, drawn either way, as a cut', () => {
+    expect(isSlash(slant(45))).toBe(true);
+    expect(isSlash(slant(45).reverse())).toBe(true);
+  });
+
+  it('leaves flat, upright, backward and tiny lines alone', () => {
+    expect(isSlash(slant(5))).toBe(false);
+    expect(isSlash(slant(88))).toBe(false);
+    expect(isSlash(slant(-45))).toBe(false);
+    expect(isSlash(line([0, 0], [10, -10]))).toBe(false);
+  });
+
+  it('takes a V as a caret but not a rounded U', () => {
+    const v = [...line([0, 0], [80, 160]), ...line([80, 160], [160, 0])];
+    const u = Array.from({ length: 60 }, (_, i) => [80 - 80 * Math.cos((i * Math.PI) / 59), 80 * Math.sin((i * Math.PI) / 59)] as Pt);
+    expect(isCaret(v)).toBe(true);
+    expect(isCaret(u)).toBe(false);
+  });
+});
