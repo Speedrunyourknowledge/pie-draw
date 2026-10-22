@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { dist, fitInBox } from '../geometry';
 import { GESTURES, describeAction, gestureFor } from '../gestures/gestureConfig';
-import { REJECT_THRESHOLD, pathLength, rank, toTemplate, type Match, type Template } from '../gestures/recognizer';
+import { REJECT_THRESHOLD, pathLength, rank, type Match, type Template } from '../gestures/recognizer';
 import {
+  buildTemplates,
   exampleSample,
   parseTemplateFile,
   recordedSamples,
+  sampleTemplates,
   serializeExamplesFile,
   serializeTemplateFile,
   type Sample,
@@ -16,7 +18,7 @@ import type { Pt } from '../types';
 import { StrokeMarks } from './StrokeMarks';
 
 /**
- * Hidden mode for recording gesture training samples, opened with ?record=1.
+ * Hidden mode for recording gesture training samples, opened by starting the app with RECORD_MODE=true.
  * Pick a label, draw, accept or discard, and save the set to src/gestures/templates.json.
  * Unsaved work is kept in localStorage, so a reload doesn't lose it.
  */
@@ -24,14 +26,19 @@ import { StrokeMarks } from './StrokeMarks';
 const DRAFT_KEY = 'pie-draw:record-draft';
 const LABEL_KEY = 'pie-draw:record-label';
 const MIN_LENGTH = 20; // px; shorter strokes are taken as slips and ignored
-const TARGET = 5; // samples per label before it counts as covered (the assignment asks for 5–10)
+const TARGET = 10; // samples per label before it counts as covered (the assignment asks for 5–10)
 
 interface Rec extends Sample {
   id: number;
 }
 
+/** An undoable change: a kept sample, or a deleted one and where it was in the list. */
+type Edit = { kind: 'keep'; id: number } | { kind: 'delete'; rec: Rec; index: number };
+
 let nextId = 1;
 const withIds = (samples: Sample[]): Rec[] => samples.map((s) => ({ ...s, id: nextId++ }));
+/** A sample as it's saved (points rounded), ignoring the example flag, to tell saved samples from new ones. */
+const sampleKey = (s: Sample) => serializeTemplateFile([{ label: s.label, points: s.points }]);
 
 function readDraft(): Sample[] | null {
   try {
@@ -56,15 +63,11 @@ function store(key: string, value: string | null) {
  * other samples can't be matched yet, so it gets no result.
  */
 function leaveOneOut(samples: Rec[]): Map<number, Match | null> {
-  const temps = new Map<number, Template>();
-  for (const s of samples) {
-    const t = toTemplate(s.label, s.points);
-    if (t) temps.set(s.id, t);
-  }
+  const temps = new Map<number, Template[]>(samples.map((s) => [s.id, sampleTemplates(s)]));
   const out = new Map<number, Match | null>();
   for (const s of samples) {
     if (!samples.some((o) => o.id !== s.id && o.label === s.label)) continue;
-    const others = samples.flatMap((o) => (o.id !== s.id && temps.has(o.id) ? [temps.get(o.id)!] : []));
+    const others = samples.flatMap((o) => (o.id !== s.id ? temps.get(o.id)! : []));
     out.set(s.id, rank(s.points, others)[0] ?? null);
   }
   return out;
@@ -91,7 +94,8 @@ function Recorder() {
   const [pending, setPending] = useState<Pt[] | null>(null);
   const [live, setLive] = useState<Pt[] | null>(null);
   const [autoAccept, setAutoAccept] = useState(false);
-  const [added, setAdded] = useState<number[]>([]); // ids accepted this session, for undo
+  // Kept and deleted samples this session, newest last, for undo.
+  const [history, setHistory] = useState<Edit[]>([]);
   const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null);
   const padRef = useRef<SVGSVGElement>(null);
   const drawing = useRef<Pt[] | null>(null);
@@ -125,10 +129,24 @@ function Recorder() {
     return c;
   }, [samples]);
 
-  const templates = useMemo(() => samples.flatMap((s) => toTemplate(s.label, s.points) ?? []), [samples]);
+  // Samples not yet in the saved file, so the counts show what a save would add.
+  const unsaved = useMemo(() => {
+    const left = new Map<string, number>();
+    for (const s of parseTemplateFile(JSON.parse(saved)).samples) left.set(sampleKey(s), (left.get(sampleKey(s)) ?? 0) + 1);
+    const out = new Set<number>();
+    for (const s of samples) {
+      const k = sampleKey(s), n = left.get(k) ?? 0;
+      if (n > 0) left.set(k, n - 1);
+      else out.add(s.id);
+    }
+    return out;
+  }, [samples, saved]);
+
+  const templates = useMemo(() => buildTemplates(samples), [samples]);
   const loo = useMemo(() => leaveOneOut(samples), [samples]);
   const matches = useMemo(() => (pending ? rank(pending, templates).slice(0, 3) : []), [pending, templates]);
   const ofLabel = samples.filter((s) => s.label === label);
+  const unsavedOfLabel = ofLabel.filter((s) => unsaved.has(s.id)).length;
   const shown = useMemo(() => exampleSample(label, samples), [label, samples]); // the reference's picture
   const failing = samples.filter((s) => {
     const m = loo.get(s.id);
@@ -142,17 +160,23 @@ function Recorder() {
     if (!points) return;
     const rec = { label, points, id: nextId++ };
     setSamples((s) => [...s, rec]);
-    setAdded((a) => [...a, rec.id]);
+    setHistory((h) => [...h, { kind: 'keep', id: rec.id }]);
     setPending(null);
   };
   const discard = () => setPending(null);
   const undo = () => {
-    const id = added[added.length - 1];
-    if (id === undefined) return;
-    setAdded((a) => a.slice(0, -1));
+    const last = history[history.length - 1];
+    if (!last) return;
+    setHistory((h) => h.slice(0, -1));
+    if (last.kind === 'keep') setSamples((s) => s.filter((x) => x.id !== last.id));
+    else setSamples((s) => [...s.slice(0, last.index), last.rec, ...s.slice(last.index)]);
+  };
+  const remove = (id: number) => {
+    const index = samples.findIndex((x) => x.id === id);
+    if (index < 0) return;
+    setHistory((h) => [...h, { kind: 'delete', rec: samples[index], index }]);
     setSamples((s) => s.filter((x) => x.id !== id));
   };
-  const remove = (id: number) => setSamples((s) => s.filter((x) => x.id !== id));
   /** Makes a sample its label's example in the gesture reference (one per label), or unpins it. */
   const toggleExample = (id: number) =>
     setSamples((all) => {
@@ -168,7 +192,7 @@ function Recorder() {
       const res = await fetch('/__gesture-templates', { method: 'POST', body });
       if (!res.ok) throw new Error(await res.text());
       setSaved(json);
-      flash(`Saved ${samples.length} samples to src/gestures/templates.json and examples.json`);
+      flash(`Saved ${unsaved.size} new (${samples.length} in all) to src/gestures/templates.json and examples.json`);
     } catch (err) {
       flash(`Save failed: ${err instanceof Error ? err.message : err}. Use Download instead.`, true);
     }
@@ -199,9 +223,24 @@ function Recorder() {
     }
   };
 
+  /** Loads the templates.json from before the last save, as unsaved changes; saving makes it current again. */
+  const restoreBackup = async () => {
+    try {
+      const res = await fetch('/__gesture-templates/backup');
+      if (!res.ok) throw new Error(await res.text());
+      const backup = parseTemplateFile(await res.json()).samples;
+      setSamples(withIds(backup));
+      setHistory([]);
+      setPending(null);
+      flash(`Loaded ${backup.length} samples from before the last save. Save to keep them, or Revert.`);
+    } catch (err) {
+      flash(`Couldn't load the backup: ${err instanceof Error ? err.message : err}`, true);
+    }
+  };
+
   const revert = () => {
     setSamples(withIds(recordedSamples));
-    setAdded([]);
+    setHistory([]);
     setPending(null);
     flash('Reverted to templates.json');
   };
@@ -244,10 +283,12 @@ function Recorder() {
       const key = e.key;
       let handled = true;
       if (isMod(e) && key.toLowerCase() === 'z') undo();
-      else if (isMod(e) && key.toLowerCase() === 's') void save();
+      else if (isMod(e) && key.toLowerCase() === 's') {
+        if (dirty) void save();
+      }
       else if (isMod(e) || e.altKey) handled = false;
-      else if (key === 'Enter' || key === ' ') accept();
-      else if (key === 'Escape' || key === 'Backspace' || key === 'Delete') discard();
+      else if (key === 'Enter') accept();
+      else if (key === 'Escape') discard();
       else if (key === 'ArrowDown' || key === 'ArrowUp') {
         const i = labels.indexOf(label) + (key === 'ArrowDown' ? 1 : -1);
         setLabel(labels[(i + labels.length) % labels.length]);
@@ -274,7 +315,8 @@ function Recorder() {
           <span className="rec-dot" /> Record gestures
           <span className="record-total">
             {samples.length} samples{failing > 0 && <> · <span className="rec-bad">{failing} misrecognized</span></>}
-            {dirty && <span className="dirty" title="Unsaved changes"> • unsaved</span>}
+            {unsaved.size > 0 && <span className="dirty"> · {unsaved.size} new, not saved yet</span>}
+            {dirty && unsaved.size === 0 && <span className="dirty" title="Unsaved changes"> • unsaved</span>}
           </span>
         </div>
         <div className="record-actions">
@@ -300,6 +342,11 @@ function Recorder() {
               Save to project
             </button>
           )}
+          {import.meta.env.DEV && (
+            <button onClick={() => void restoreBackup()} title="Load templates.backup.json, the samples from before the last save">
+              Load backup
+            </button>
+          )}
           <button onClick={() => useStore.getState().setRecordOpen(false)} title="Back to drawing">Exit</button>
         </div>
       </header>
@@ -318,20 +365,26 @@ function Recorder() {
               title={gestureFor(l)?.hint ?? 'Not in gestureConfig.ts: these samples are recognized but do nothing'}
             >
               <span>{l}</span>
-              <span className={`rec-count${n >= TARGET ? ' done' : ''}`}>{n}</span>
+              <span className={`rec-count${n >= TARGET ? ' done' : ''}`}>
+                {n}/{TARGET}
+              </span>
             </button>
           );
         })}
         <p className="rec-help">
           ↑ ↓ change gesture<br />
-          Enter accept · Esc discard<br />
-          {kbd('mod+z')} undo last sample
+          Enter keep · Esc discard<br />
+          {kbd('mod+z')} undo keep or delete
         </p>
       </nav>
 
       <main className="record-main">
         <div className="rec-prompt">
           <b>{label}</b> <span>{def ? `${describeAction(def.action)} · ${def.hint}` : 'Not in gestureConfig.ts'}</span>
+          <span className={`rec-progress${ofLabel.length >= TARGET ? ' done' : ''}`}>
+            {ofLabel.length} of {TARGET} samples
+            {unsavedOfLabel > 0 && <span className="dirty"> · {unsavedOfLabel} not saved yet</span>}
+          </span>
         </div>
         <svg ref={padRef} className="rec-pad" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
           {live && live.length > 1 && <polyline className="rec-stroke" points={live.map((p) => p.join(',')).join(' ')} />}
@@ -363,16 +416,18 @@ function Recorder() {
                   'No samples to compare against yet'
                 )}
               </span>
-              <span className="rec-buttons">
-                <button onClick={discard}>Discard</button>
-                <button className="primary" onClick={() => accept()}>Accept</button>
-              </span>
             </>
           ) : (
             <span className="rec-next">
               Vary size, speed and proportions. The green dot marks the start, the arrow the end.
             </span>
           )}
+          <span className="rec-buttons">
+            <button onClick={discard} disabled={!pending} title="Throw this stroke away (Esc)">Discard</button>
+            <button className="primary" onClick={() => accept()} disabled={!pending} title="Keep this stroke as a sample (Enter)">
+              Keep sample
+            </button>
+          </span>
         </div>
         <section className="rec-samples">
           {ofLabel.length === 0 && <span className="rec-next">No {label} samples yet.</span>}
@@ -403,7 +458,7 @@ function Recorder() {
                 >
                   {s.example ? '★' : '☆'}
                 </button>
-                <button className="rec-del" onClick={() => remove(s.id)} title="Delete this sample" aria-label="Delete sample">
+                <button className="rec-del" onClick={() => remove(s.id)} title={`Delete this sample (undo with ${kbd('mod+z')})`} aria-label="Delete sample">
                   ×
                 </button>
               </figure>

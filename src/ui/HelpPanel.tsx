@@ -33,11 +33,12 @@ const KEYS: [string, string][] = [
 
 export function HelpPanel() {
   const open = useStore((s) => s.helpOpen);
+  const swapped = useStore((s) => s.panelSwapped);
   const close = () => useStore.getState().setHelpOpen(false);
   if (!open) return null;
 
   return (
-    <div className="help-backdrop" onPointerDown={close}>
+    <div className={`help-backdrop${swapped ? ' swapped' : ''}`} onPointerDown={close}>
       <div className="help" role="dialog" aria-label="Help" onPointerDown={(e) => e.stopPropagation()}>
         <header className="help-head">
           <h2>How to Use Pie Draw</h2>
@@ -67,7 +68,7 @@ export function HelpPanel() {
             <li>The <b>File</b> menu at the top allows you to save and open your drawings.</li>
             <li>
               <b>Gestures:</b> with Gestures on (top bar, or <Key>G</Key>), single strokes create shapes, select, copy, paste, set colors and delete.{' '}
-              <button className="help-link" onClick={() => useStore.getState().setGestureGuideOpen(true)}>See all gestures</button>
+              <button className="help-link" onClick={() => useStore.getState().setGestureGuideOpen(true)}>See all gestures →</button>
             </li>
           </ul>
         </section>

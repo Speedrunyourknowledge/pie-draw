@@ -54,8 +54,10 @@ interface AppState {
   view: View; // not part of the document or the undo history
   helpOpen: boolean;
   gestureGuideOpen: boolean; // the gesture reference panel
+  /** The open panel replaced the other one directly, so its backdrop is already showing and shouldn't fade in. */
+  panelSwapped: boolean;
   recordOpen: boolean;
-  gesturesOn: boolean; // off: every stroke stays freehand (no recognizer, no shape snapping) // hidden gesture record mode (?record=1)
+  gesturesOn: boolean; // off: every stroke stays freehand (no recognizer, no shape snapping) // hidden gesture record mode (RECORD_MODE=true)
   dropTargetId: string | null; // shape under a color being dragged from the dock
   tool: Tool;
   createType: PrimitiveType; // the shape the create tool draws
@@ -76,6 +78,8 @@ interface AppState {
   toggleSelect: (id: string) => void;
   selectAll: () => void;
   deleteSelected: () => void;
+  /** Removes these shapes as one undo step. */
+  deleteShapes: (ids: string[]) => void;
   copy: () => void;
   cut: () => void;
   /** Pastes the clipboard centered at `at`, or offset from the last copy/paste when omitted. */
@@ -158,7 +162,8 @@ export const useStore = create<AppState>()((set, get) => {
     view: HOME_VIEW,
     helpOpen: false,
     gestureGuideOpen: false,
-    recordOpen: new URLSearchParams(location.search).has('record'),
+    panelSwapped: false,
+    recordOpen: import.meta.env.RECORD_MODE === true,
     gesturesOn: readGesturesOn(),
     dropTargetId: null,
     tool: 'draw',
@@ -202,6 +207,12 @@ export const useStore = create<AppState>()((set, get) => {
         shapes: st.shapes.filter((s) => s.id !== id),
         selectedIds: st.selectedIds.filter((x) => x !== id),
       })),
+
+    deleteShapes: (ids) => {
+      if (ids.length === 0) return;
+      const { shapes, selectedIds } = get();
+      change({ shapes: shapes.filter((s) => !ids.includes(s.id)), selectedIds: selectedIds.filter((x) => !ids.includes(x)) });
+    },
 
     deleteSelected: () => {
       const { selectedIds, shapes } = get();
@@ -346,9 +357,9 @@ export const useStore = create<AppState>()((set, get) => {
     setView: (view) => set({ view }),
 
     // Help and the gesture reference replace each other, so only one panel is ever open.
-    setHelpOpen: (helpOpen) => set({ helpOpen, gestureGuideOpen: false }),
+    setHelpOpen: (helpOpen) => set((st) => ({ helpOpen, gestureGuideOpen: false, panelSwapped: helpOpen && st.gestureGuideOpen })),
 
-    setGestureGuideOpen: (gestureGuideOpen) => set({ gestureGuideOpen, helpOpen: false }),
+    setGestureGuideOpen: (gestureGuideOpen) => set((st) => ({ gestureGuideOpen, helpOpen: false, panelSwapped: gestureGuideOpen && st.helpOpen })),
 
     setGesturesOn: (gesturesOn) => {
       try {
@@ -361,11 +372,7 @@ export const useStore = create<AppState>()((set, get) => {
     },
 
     setRecordOpen: (recordOpen) => {
-      // Mirrored in the URL (?record=1), so a reload or a dev-server reload after saving stays in record mode.
-      const url = new URL(location.href);
-      if (recordOpen) url.searchParams.set('record', '1');
-      else url.searchParams.delete('record');
-      history.replaceState(null, '', url);
+      // A reload (or a dev-server reload after saving) reopens record mode while RECORD_MODE=true.
       set({ recordOpen, helpOpen: false, gestureGuideOpen: false });
     },
 

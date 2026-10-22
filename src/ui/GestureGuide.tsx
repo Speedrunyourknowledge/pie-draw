@@ -17,12 +17,16 @@ const SCRIBBLE: Pt[] = [[14, 22], [50, 18], [12, 32], [52, 28], [14, 42], [50, 3
 /** Reference of every gesture and what it does, built from the gesture config and recorded samples. */
 export function GestureGuide() {
   const open = useStore((s) => s.gestureGuideOpen);
+  const swapped = useStore((s) => s.panelSwapped);
   const close = () => useStore.getState().setGestureGuideOpen(false);
   if (!open) return null;
 
   return (
-    <div className="help-backdrop" onPointerDown={close}>
+    <div className={`help-backdrop${swapped ? ' swapped' : ''}`} onPointerDown={close}>
       <div className="help gesture-guide" role="dialog" aria-label="Gestures" onPointerDown={(e) => e.stopPropagation()}>
+        <button className="help-link help-back" onClick={() => useStore.getState().setHelpOpen(true)}>
+          ← Back to help menu
+        </button>
         <header className="help-head">
           <h2>Gestures</h2>
           <button className="help-close" onClick={close} aria-label="Close gestures">
@@ -30,9 +34,8 @@ export function GestureGuide() {
           </button>
         </header>
         <p>
-          With <b>Gestures</b> on (top bar, or <Key>G</Key>), draw one of these in a single stroke. Start at the{' '}
-          <span className="guide-start" aria-hidden /> green dot and follow the arrows: where a gesture starts and
-          which way it goes both matter. Turn Gestures off to draw freely.
+          With <b>Gestures</b> on (top bar, or <Key>G</Key>), draw one of these in a single stroke. Each picture starts at
+          the <span className="guide-start" aria-hidden /> green dot and follows the arrows. Turn Gestures off to draw freely.
         </p>
 
         {GESTURE_SECTIONS.map(({ name, note }) => (
@@ -49,7 +52,7 @@ export function GestureGuide() {
                         <StrokeMarks points={example.points} scale={0.9} />
                       </svg>
                     ) : (
-                      <div className="guide-thumb missing" title="No samples recorded yet (record them at ?record=1)">
+                      <div className="guide-thumb missing" title="No samples recorded yet (record them with RECORD_MODE=true)">
                         not recorded
                       </div>
                     )}
@@ -77,7 +80,7 @@ export function GestureGuide() {
               </svg>
               <figcaption>
                 <b>Delete the shapes it crosses</b>
-                <span>Scribble back and forth over one or more shapes</span>
+                <span>Scribble rapidly back and forth over one or more shapes</span>
               </figcaption>
             </figure>
           </div>

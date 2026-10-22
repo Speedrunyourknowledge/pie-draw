@@ -4,6 +4,8 @@
  */
 import { fitInBox } from '../geometry';
 import { EXAMPLE_BOX } from './examples';
+import { gestureFor } from './gestureConfig';
+import { closedPart } from './heuristics';
 import { N, rank, toTemplate, type Template } from './recognizer';
 import data from './templates.json';
 import type { Pt } from '../types';
@@ -56,9 +58,54 @@ export function serializeTemplateFile(samples: Sample[]): string {
   return `{\n  "version": 1,\n  "samples": [\n${lines.join(',\n')}\n  ]\n}\n`;
 }
 
-/** Resamples every sample into a recognizer template. Degenerate samples are skipped. */
+/** Start points spread evenly around a loop for gestures marked anyStart (the recorded one included). */
+export const LOOP_STARTS = 8;
+
+/**
+ * The same loop started from LOOP_STARTS evenly spaced points along it, in the same direction.
+ * Any stroke past where the loop closes is dropped first, so the copies don't repeat a stretch.
+ */
+export function loopStarts(stroke: readonly Pt[], count = LOOP_STARTS): Pt[][] {
+  const pts = closedPart(stroke.slice()).points;
+  const cum = [0];
+  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  const total = cum[cum.length - 1];
+  const out: Pt[][] = [pts];
+  for (let k = 1; k < count; k++) {
+    const i = cum.findIndex((d) => d >= (total * k) / count);
+    if (i <= 0 || i >= pts.length - 1) continue;
+    out.push([...pts.slice(i), ...pts.slice(0, i + 1)]); // around the loop and back to the new start
+  }
+  return out;
+}
+
+/** Quarter turns added for gestures marked anyRotation (the recorded orientation is the first). */
+export const ROTATIONS = 4;
+
+/** The stroke turned by each quarter turn; on screen (y down), a positive turn is clockwise. */
+export function quarterTurns(stroke: readonly Pt[]): Pt[][] {
+  const out: Pt[][] = [stroke.slice()];
+  for (let k = 1; k < ROTATIONS; k++) out.push(out[k - 1].map(([x, y]) => [-y, x] as Pt));
+  return out;
+}
+
+/**
+ * A sample's recognizer templates: the sample itself, plus its copies started elsewhere on the loop
+ * (anyStart), turned by quarter turns (anyRotation) and drawn backwards (eitherDirection). None if
+ * the sample is degenerate.
+ */
+export function sampleTemplates(s: Sample, n = N): Template[] {
+  if (!toTemplate(s.label, s.points, n)) return [];
+  const def = gestureFor(s.label);
+  let strokes = def?.anyStart ? loopStarts(s.points) : [s.points];
+  if (def?.anyRotation) strokes = strokes.flatMap(quarterTurns);
+  if (def?.eitherDirection) strokes.push(...strokes.map((p) => p.slice().reverse()));
+  return strokes.flatMap((p) => toTemplate(s.label, p, n) ?? []);
+}
+
+/** Resamples every sample into recognizer templates. Degenerate samples are skipped. */
 export function buildTemplates(samples: readonly Sample[], n = N): Template[] {
-  return samples.flatMap((s) => toTemplate(s.label, s.points, n) ?? []);
+  return samples.flatMap((s) => sampleTemplates(s, n));
 }
 
 /** The samples shipped in templates.json. */

@@ -1,6 +1,6 @@
 # Pie Draw
 
-A browser-based 2D **drawing** app. Features a context-aware **pie menu** for most actions. Shapes and freehand strokes are vector objects that can be selected, moved, scaled, and recolored. There is no pixel-level editing.
+A browser-based 2D **drawing** app. Features a context-aware **pie menu** for most actions and a **gestural interface** built on a hand-implemented Penny Pincher recognizer. Shapes and freehand strokes are vector objects that can be selected, moved, scaled, and recolored. There is no pixel-level editing.
 
 ## Running It
 
@@ -30,6 +30,27 @@ Right-click, or left-press-and-hold for ~300 ms, to open a radial menu centered 
 - **Fixed layouts.** Each option always sits in the same place, so choices can be made from memory.
 - **Submenus** open in an outer ring, reached in the same stroke as the first choice.
 - **Keyboard.** The menu can be opened, navigated, and used without a mouse.
+
+### Gestures
+
+With **Gestures** on (top bar switch, or **G**), single strokes drawn on the canvas act as commands. *(In progress: the shape gestures and scribble erase work; templates for the other gestures are still being recorded, so they are not yet connected to their actions.)*
+
+| Action | Gesture |
+|---|---|
+| Rectangle / square | Closed loop with 4 corners, clockwise |
+| Ellipse / circle | Round closed loop, clockwise |
+| Triangle | Closed loop with 3 corners, clockwise |
+| Lasso select | Closed loop, counterclockwise |
+| Copy | Letter C |
+| Cut | Forward slash, either direction |
+| Paste | Upside-down caret, either direction |
+| Colors 1–5 | Numbers 1–5: inside a shape fills it; elsewhere sets the line color of the selection, or of new shapes |
+| Delete | Scribble rapidly back and forth over shapes |
+
+- **Gesture reference.** The help panel links to a reference of every gesture, illustrated with a recorded example showing where it starts and which way it goes.
+- **Shapes snap to clean primitives.** A rectangle, ellipse or triangle gesture is replaced by that shape, sized to the stroke. Near-equal sides make a square or circle. Shapes can start at any point and may be drawn slightly tilted: rectangles and ellipses come out upright, while triangles keep the orientation they were drawn with. While drawing, a faded preview shows the shape the stroke will become.
+- **Scribble erase.** Scribbling over shapes deletes every shape the stroke touches, as one undoable step. A scribble over empty canvas stays an ordinary stroke.
+- **Record mode** (`RECORD_MODE=true npm run dev`) is a hidden developer screen for recording labeled training samples, saved to `src/gestures/templates.json`.
 
 ### Drawing and Editing
 
@@ -75,12 +96,42 @@ Saving and opening files can be done through the **File** menu in the toolbar. D
 
 **Feedback and discoverability.** A status line at the bottom always says what the user can currently do, in every state and tool. When the canvas is blank, the user is instructed how to open the pie menu and how to access the help panel.
 
+### Gesture Design
+
+**The gesture set.** Gestures are chosen to be memorable and distinct from each other. Shapes are drawn as themselves. Copy is a **C**. Cut is a slash, like a cut through paper. Paste is an upside-down caret marking where the content goes. The five colors are the numbers **1–5**, matching the keyboard shortcuts for the same colors. The whole set lives in one config table, so a gesture can be swapped without touching the rest of the app.
+
+**Recognizer plus heuristics.** The Penny Pincher recognizer (Taranta & LaViola, 2015) is implemented by hand, without libraries. It resamples a stroke into evenly spaced direction vectors and picks the recorded template whose vectors line up best. Heuristics work alongside it with a strict division of labor: the recognizer *proposes* a gesture, and heuristics may only *reject* it or *refine* it within its family (for example, rectangle → square based on the drawn aspect ratio). A heuristic never swaps in a different gesture, so the recognizer remains the real classifier. When the best proposal is vetoed, the next one in the recognizer's ranking is tried, as long as it also scored above the reject threshold. The app's original freehand snap-to-shape code was kept and refactored into this heuristic layer.
+
+**Tuning the heuristics on recorded data.** The heuristics only check what the recognizer cannot see: whether the stroke closes, how far it runs on, whether it is too small, and how many corners it has. The rectangle and triangle checks use corners and angles rather than the bounding box, so a slightly tilted shape the recognizer accepts is not rejected for its tilt; a tilted rectangle is measured along its own edges. Corner count turned out to be the clearest separator in the recorded samples: every rectangle has 4, every triangle 3, and every circle 6 or more. It settles the closest calls, such as a right triangle, which shares two sides with a rectangle, or a lopsided circle, which can be as far from a true ellipse as a rectangle with rounded corners. Ovals are measured along their own axes too, so a slightly tilted one becomes an upright ellipse of the right size, while one leaning more than 30° is left as drawn. The recordings showed that hand-drawn circles tend to be slightly egg-shaped along a diagonal, so a stroke with a roughly square bounding box is judged as a circle before any tilt is measured. A test runs every held-out stroke (see *Training data*) through the full pipeline, so a threshold that rejects real strokes fails the tests.
+
+**Scribble erase is heuristic-only.** A scribble's shape varies too much for templates, so it is detected directly: enough sharp direction reversals, over at least one shape. It runs before the recognizer.
+
+**Generating templates from fewer samples.** Penny Pincher is sensitive to start point, drawing direction and rotation. That is useful where these carry meaning (a clockwise loop is a circle, a counterclockwise loop is a lasso), but covering every variation by hand would take a lot of recording. The recognizer itself is unchanged; instead, three options per gesture generate extra templates from each recorded sample:
+- **Either direction** (cut, paste): each recorded sample is also added reversed, so the gesture can be drawn either way.
+- **Any start point** (rectangle, ellipse, triangle, lasso): each recorded loop is also added starting from 8 points around it, so the loop can start anywhere. Direction still counts.
+- **Any rotation** (rectangle, ellipse, triangle, lasso): each recorded sample is also added turned 90°, 180° and 270°. An upward triangle also covers left-, down- and right-pointing ones, and a wide rectangle or oval also covers a tall one. Rotating keeps a loop's direction, so circle and lasso stay apart. Recording without it showed the need: triangles in orientations with only one or two samples were mistaken for rectangles.
+
+**Measuring the cost against the accuracy gain.** Every generated copy is one more template to compare each stroke against, and Penny Pincher's appeal is its speed, so the copies have to earn their cost. Both were measured on the recorded loop gestures (rectangle, circle, triangle, lasso). For accuracy, 10 samples per gesture were drawn at random as templates and the remaining 20 per gesture used as test strokes, averaged over 20 random splits. Time is per stroke, in Node on a laptop:
+
+| Templates generated from 10 samples per gesture | Templates | Time per stroke | Recognizer alone | With heuristics |
+|---|---|---|---|---|
+| None (recorded samples only) | 40 | 0.014 ms | 81% | 82% |
+| Any start point | 320 | 0.05 ms | 91% | 93% |
+| Any start point + any rotation | 1,280 | 0.12 ms | 96% | 99.4% |
+
+The copies cost about a tenth of a millisecond per stroke, under 1% of a 60 fps frame, even though recognition runs every frame for the live preview. In exchange, errors drop from about 1 stroke in 6 to about 1 in 170. That is well worth it. The copies are also what makes the suggested 5–10 samples per gesture enough: without them, 10 samples gets about 82%.
+
+This follows the Penny Pincher paper's own argument: the recognizer is built to be fast so that it can check more templates within a time budget, and its error kept falling as templates were added, until its datasets ran out of samples (around 200 templates per gesture for most of them). With 10 recorded samples, each loop gesture here has 320 templates, in the same range. The paper also notes that Penny Pincher is not rotation invariant but that "with more templates loaded, variations in angular displacement are well represented"; the rotation copies supply those templates without more recording. The paper argues against generating permutations of multistroke gestures, since extra real examples have the same effect and generated ones "may never occur in practice." Here, real examples are limited to about 10 per gesture, and the held-out test shows that the generated copies do match strokes people actually draw.
+
+**Training data.** Each gesture has 10 recorded samples in `src/gestures/templates.json`. Each loop gesture was recorded 30 times; the 10 kept as templates are the ones that best cover the other 20, chosen greedily by recognizer score. The other 20 per gesture are kept in `src/gestures/holdout.json` as test strokes the recognizer never trains on. All 80 are recognized correctly. Templates store raw stroke points, not precomputed vectors, so the recognizer's settings can change without re-recording. The reference pictures are computed when templates are saved, so normal use does no extra work at startup.
+
 ## Limitations / Not Yet Implemented
 
 - **Mobile and touch.** No support for touchscreen pinch-to-zoom or two-finger pan. Additionally, there is no alternate UI for small screens.
 - **Browsers other than desktop Chrome/Edge.** Can save files, but Save downloads a new copy each time instead of overwriting the original.
 - **Pie menu accessibility.** The menu works from the keyboard, but nothing is announced to screen readers.
-- **Rotation.** Rotation of shapes is not supported.
+- **Rotation.** Rotation of shapes is not supported, and gestures are not rotation invariant.
+- **Filling several shapes by gesture.** A color gesture fills one shape at a time. Drawing inside a selection moves it, so a number can't be drawn there to fill all of it.
 - **Drawing capabilities.** One stroke width, a fixed five-color palette, no command to create straight lines.
 - **Erasing.** There is no pixel-level erasing, by design.
 - **Export and persistence.** No PNG/SVG export, no autosave.

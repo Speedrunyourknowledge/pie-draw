@@ -273,3 +273,41 @@ export function fitInBox(points: Pt[], size: number, pad: number): Pt[] {
   const ox = (size - (b.maxX - b.minX) * k) / 2, oy = (size - (b.maxY - b.minY) * k) / 2;
   return points.map(([x, y]) => [ox + (x - b.minX) * k, oy + (y - b.minY) * k]);
 }
+
+/** Distance from p to segment a–b. */
+function distToSegment(p: Pt, a: Pt, b: Pt): number {
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  const len2 = dx * dx + dy * dy;
+  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2));
+  return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+}
+
+/**
+ * Whether a canvas point is on a shape or within `tol` of it. Closed shapes count by their area
+ * (as in box selection); freehand lines by the line itself.
+ */
+export function shapeNearPoint(s: Shape, p: Pt, tol: number): boolean {
+  const b = worldBounds(s);
+  if (p[0] < b.minX - tol || p[0] > b.maxX + tol || p[1] < b.minY - tol || p[1] > b.maxY + tol) return false;
+  const toWorld = ([x, y]: Pt): Pt => [s.x + x * s.scaleX, s.y + y * s.scaleY];
+  switch (s.type) {
+    case 'square':
+    case 'rectangle':
+      return true; // inside the bounding box grown by tol
+    case 'circle':
+    case 'ellipse': {
+      const rx = Math.abs(s.rx * s.scaleX) + tol, ry = Math.abs(s.ry * s.scaleY) + tol;
+      return ((p[0] - s.x) / rx) ** 2 + ((p[1] - s.y) / ry) ** 2 <= 1;
+    }
+    case 'triangle': {
+      const pts = s.points.map(toWorld);
+      return pointInPolygon(p, pts) || pts.some((a, i) => distToSegment(p, a, pts[(i + 1) % pts.length]) <= tol);
+    }
+    case 'freehand': {
+      const pts = s.points.map(toWorld);
+      const reach = tol + s.strokeWidth / 2;
+      if (pts.length === 1) return dist(p, pts[0]) <= reach;
+      return pts.some((a, i) => i > 0 && distToSegment(p, pts[i - 1], a) <= reach);
+    }
+  }
+}

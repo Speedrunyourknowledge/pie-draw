@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import simplify from 'simplify-js';
-import { STROKE_WIDTH, dist, groupBounds, keepsAspect, makeFreehand, makePrimitive, makePrimitiveInBox, shapeTouchesRect, worldBounds, type Bounds } from '../geometry';
+import { STROKE_WIDTH, dist, groupBounds, keepsAspect, makeFreehand, makePrimitive, makePrimitiveInBox, shapeNearPoint, shapeTouchesRect, worldBounds, type Bounds } from '../geometry';
+import { CUSP_SPAN_PX, SCRIBBLE_HIT_PX, isScribble } from '../gestures/heuristics';
 import { PieMenu } from '../interaction/PieMenu';
 import {
   DEAD_ZONE,
@@ -139,11 +140,10 @@ interface StatusInput {
   selectionCount: number;
   tool: Tool;
   createType: PrimitiveType;
-  gesturesOn: boolean;
 }
 
 /** One line of context-sensitive guidance, so the available actions are never a mystery. */
-function statusText({ menu, mode, selectionCount, tool, createType, gesturesOn }: StatusInput) {
+function statusText({ menu, mode, selectionCount, tool, createType }: StatusInput) {
   if (menu) return 'Select an option · Click the center or outside the menu to cancel';
   if (mode === 'scaling') return 'Hold Shift to keep proportions';
   if (mode === 'selecting') return 'Every shape the box touches is selected · Release to finish';
@@ -160,7 +160,6 @@ function statusText({ menu, mode, selectionCount, tool, createType, gesturesOn }
   if (selectionCount > 0) {
     return `Drag to move · Drag edges or corners to scale · ${kbd('mod')}-click to add or remove · Right-click for more options`;
   }
-  if (!gesturesOn) return 'Gestures off: strokes stay as drawn · Right-click or left-press-and-hold for the menu';
   return 'Right-click or left-press-and-hold for the menu · Drag to draw · Shift-drag to select';
 }
 
@@ -173,7 +172,6 @@ export function Canvas() {
   const dropTargetId = useStore((s) => s.dropTargetId);
   const tool = useStore((s) => s.tool);
   const createType = useStore((s) => s.createType);
-  const gesturesOn = useStore((s) => s.gesturesOn);
 
   const svgRef = useRef<SVGSVGElement>(null);
   const gesture = useRef<Gesture>({ kind: 'none' });
@@ -313,6 +311,16 @@ export function Canvas() {
     setStroke(null);
     setGhost(null);
     if (points.length < 2) return;
+    // A scribble over shapes erases them. One that touches no shape falls through like any stroke.
+    if (st.gesturesOn && isScribble(points, CUSP_SPAN_PX / st.view.zoom)) {
+      const tol = SCRIBBLE_HIT_PX / st.view.zoom;
+      const hit = st.shapes.filter((s) => points.some((p) => shapeNearPoint(s, p, tol))).map((s) => s.id);
+      if (hit.length > 0) {
+        st.deleteShapes(hit);
+        st.showToast(`Erased ${hit.length === 1 ? '1 shape' : `${hit.length} shapes`} · ${kbd('mod+z')} to undo`);
+        return;
+      }
+    }
     // What the ghost showed is what you get, unless the stroke ran on too far past its start.
     // The full stroke only decides when no ghost was up.
     // With gestures off, every stroke stays exactly as drawn.
@@ -788,7 +796,7 @@ export function Canvas() {
         </div>
       )}
       <div className="status">
-        {statusText({ menu, spaceHeld: spaceHeld || panning, mode, selectionCount: selected.length, tool, createType, gesturesOn })}
+        {statusText({ menu, spaceHeld: spaceHeld || panning, mode, selectionCount: selected.length, tool, createType })}
       </div>
     </>
   );

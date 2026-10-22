@@ -215,8 +215,10 @@ button { font: inherit; color: inherit; }
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 32px;
-  padding: 0 10px;
+  /* Taller downward so the hover target reaches closer to the bar's bottom edge; the bottom padding keeps icons centered in the bar. */
+  height: 37px;
+  margin-top: 3px;
+  padding: 0 10px 3px;
   border: none;
   border-radius: 6px;
   background: transparent;
@@ -228,6 +230,9 @@ button { font: inherit; color: inherit; }
 .topbar-actions .help-btn { color: var(--accent); font-weight: 600; }
 .topbar .dot, .empty-help .dot { fill: currentColor; }
 .sep { width: 1px; height: 20px; margin: 0 6px; background: var(--panel-line); }
+/* Buttons beside a divider reach 3px toward it (icons stay put), matching the gap the gesture info button leaves. */
+.topbar-actions button:not(.gesture-info):has(+ .sep) { padding-right: 13px; margin-right: -3px; }
+.topbar-actions .sep + button { padding-left: 13px; margin-left: -3px; }
 @media (max-width: 640px) {
   .topbar-actions button span { display: none; }
   .doc-name { display: none; }
@@ -330,6 +335,8 @@ button { font: inherit; color: inherit; }
   z-index: 10;
   animation: pie-in 120ms ease-out;
 }
+/* Swapping help ↔ gestures keeps the backdrop that's already up, so it doesn't blink by fading in again. */
+.help-backdrop.swapped { animation: none; }
 .help {
   width: min(860px, 100%);
   max-height: calc(100vh - 32px);
@@ -546,7 +553,7 @@ svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo {
 .canvas.mode-menuOpen *, .canvas.mode-menuOpen .shape, .canvas.mode-menuOpen .group-area { cursor: inherit; }
 .canvas.mode-menuOpen .handle:hover { fill: #fff; }
 
-/* ---- gesture record mode (hidden: ?record=1) ---- */
+/* ---- gesture record mode (hidden: RECORD_MODE=true) ---- */
 .record {
   position: fixed;
   inset: 0;
@@ -626,6 +633,9 @@ svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo {
 .rec-prompt { font-size: 15px; }
 .rec-prompt b { font-size: 18px; margin-right: 8px; }
 .rec-prompt span { color: var(--muted); }
+.rec-prompt .rec-progress { float: right; font-weight: 600; color: inherit; }
+.rec-prompt .rec-progress.done { color: #1e7b4f; }
+.rec-prompt .rec-progress .dirty { color: var(--accent); font-weight: 400; }
 .rec-pad {
   width: 100%;
   height: 100%;
@@ -710,19 +720,27 @@ svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo {
   .topbar-actions .gesture-toggle span.switch { display: inline-block; }
 }
 /* The info button belongs to the switch beside it, so it sits close and carries no label. */
-.topbar-actions .gesture-info { padding: 0 6px; margin-left: -2px; color: var(--muted); }
+.topbar-actions .gesture-info { padding-left: 6px; padding-right: 9px; margin-left: -2px; margin-right: -3px; color: var(--muted); }
 .topbar-actions .gesture-info:hover { color: var(--accent); }
 
 /* ---- gesture reference (styled as a sibling of the help panel) ---- */
 .help-link {
-  padding: 0;
-  border: none;
-  background: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  margin: 8px 0 0;
+  padding: 7px 14px;
+  border: 1px solid rgba(62, 99, 221, 0.3);
+  border-radius: 8px;
+  background: rgba(62, 99, 221, 0.08);
   color: var(--accent);
   font-weight: 600;
   cursor: pointer;
 }
-.help-link:hover { text-decoration: underline; }
+.help-link:hover { background: rgba(62, 99, 221, 0.15); }
+.help-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.help-back { margin: 0 0 14px; }
 .guide-start {
   display: inline-block;
   width: 9px;

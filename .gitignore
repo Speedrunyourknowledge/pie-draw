@@ -26,3 +26,6 @@ dist-ssr
 # Temporary files
 tmp/
 temp/
+
+# Record mode keeps the previous templates.json here on each save
+src/gestures/templates.backup.json

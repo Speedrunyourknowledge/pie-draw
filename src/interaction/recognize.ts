@@ -1,4 +1,5 @@
-import { centerPoints, newId, paint } from '../geometry';
+import { centerPoints, newId, paint, pointsBounds } from '../geometry';
+import { gestureFor } from '../gestures/gestureConfig';
 import {
   closedPart,
   corners,
@@ -6,9 +7,12 @@ import {
   fillRatio,
   movingAverage,
   nearlyEqual,
+  resampleBySpacing,
   sharpestTurn,
   turnAngle,
 } from '../gestures/heuristics';
+import { REJECT_THRESHOLD, rank, type Template } from '../gestures/recognizer';
+import { templates as recorded } from '../gestures/templates';
 import type { Pt, Shape } from '../types';
 
 export type Recognized =
@@ -19,6 +23,9 @@ export type Recognized =
 const MIN_DIAG = 30; // strokes smaller than this are never snapped
 const CLOSE_GAP = 0.2; // how close the stroke must come back to its start, as a fraction of the bbox diagonal
 const OVERSHOOT = 0.08; // how far it may run on past that closest point, as a fraction of the bbox diagonal
+const ELLIPSE_DEVIATION = 0.16; // recorded circles reach 0.135; real rectangles get as low as 0.12
+const MAX_OVAL_TILT = (30 * Math.PI) / 180; // an oval leaning further than this is diagonal, not a sloppy upright one
+const RIGHT_ANGLE_SLACK = (30 * Math.PI) / 180; // how far a rectangle's corners may be from 90°
 
 /** True once a stroke has come back to its start and then run on too far past it. */
 export function overshot(stroke: Pt[]): boolean {
@@ -27,62 +34,137 @@ export function overshot(stroke: Pt[]): boolean {
   return close.gap <= diag * CLOSE_GAP && close.overshoot > diag * OVERSHOOT;
 }
 
+type Loop = ReturnType<typeof closedPart>;
+
 /**
- * Classifies a stroke as one of the five primitives, or null.
- * Prefers false negatives: anything ambiguous stays freehand.
+ * Turns a stroke into one of the five primitives, or null. The Penny Pincher recognizer proposes
+ * gestures, best first; the heuristics below may only veto a proposal or refine it within its family
+ * (rectangle → square, circle → ellipse). A vetoed proposal falls back to the next one that scored
+ * above the reject threshold, so the recognizer still decides the order. Prefers false negatives:
+ * anything ambiguous stays freehand.
  */
-export function recognize(stroke: Pt[]): Recognized | null {
+export function recognize(stroke: Pt[], templates: readonly Template[] = recorded): Recognized | null {
   if (stroke.length < 8) return null;
-  // Judge the shape without any overshoot past the closing point.
-  const { close, points, b, w, h, diag } = closedPart(stroke);
+  let loop: Loop | null | undefined;
+  for (const m of rank(stroke, templates)) {
+    if (m.score < REJECT_THRESHOLD) break; // the rest score lower still
+    const action = gestureFor(m.label)?.action;
+    if (action?.kind !== 'createShape') return null; // a command gesture: not wired up to the canvas yet
+    loop ??= closedLoop(stroke);
+    const r = loop && SHAPES[action.family](loop);
+    if (r) return r;
+  }
+  return null;
+}
+
+/** The stroke without any overshoot, if it is big enough and closes like a shape should; else null. */
+function closedLoop(stroke: Pt[]): Loop | null {
+  const loop = closedPart(stroke);
+  const { close, points, w, h, diag } = loop;
   if (points.length < 8) return null;
   if (diag < MIN_DIAG || Math.min(w, h) < diag * 0.12) return null; // too small or a line
   if (close.gap > diag * CLOSE_GAP) return null; // never came back near the start
   if (close.overshoot > diag * OVERSHOOT) return null; // ran on too far past it
+  if (fillRatio(points, w, h) > 1.1) return null; // traced over itself
+  return loop;
+}
 
-  const cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2;
-  // Fill ratio separates the classes robustly: triangle ~0.5, ellipse ~0.79, rectangle ~1.
-  const fill = fillRatio(points, w, h);
-  if (fill > 1.1) return null; // traced over itself
-  const c = corners(points, diag, CLOSE_GAP);
-
-  if (c.length === 3 && fill > 0.3 && fill < 0.68) {
-    const { cx: tx, cy: ty, local } = centerPoints(c);
-    return { type: 'triangle', x: tx, y: ty, points: local };
-  }
-
-  if (c.length === 4 && fill >= 0.84) {
-    const rightAngles = c.every((p, i) => {
-      const t = turnAngle(c[(i + 3) % 4], p, c[(i + 1) % 4]);
-      return Math.abs(t - Math.PI / 2) < (30 * Math.PI) / 180;
-    });
-    if (rightAngles) {
-      if (nearlyEqual(w, h)) {
-        const s = (w + h) / 2;
-        return { type: 'square', x: cx, y: cy, w: s, h: s };
-      }
-      return { type: 'rectangle', x: cx, y: cy, w, h };
+// Each check measures the stroke along its own axes or by its corners, not by its bounding box, so a
+// slightly tilted shape passes as long as the recognizer accepted it. Rectangles and ellipses are
+// always created upright (shapes don't rotate); triangles keep the tilt they were drawn with.
+const SHAPES: Record<'rectangle' | 'circle' | 'triangle', (loop: Loop) => Recognized | null> = {
+  rectangle({ points, diag }) {
+    const c = corners(points, diag, CLOSE_GAP);
+    if (c.length !== 4) return null;
+    const rightAngles = c.every((p, i) => Math.abs(turnAngle(c[(i + 3) % 4], p, c[(i + 1) % 4]) - Math.PI / 2) < RIGHT_ANGLE_SLACK);
+    if (!rightAngles) return null;
+    const { x, y, w, h } = untilted(points, rectangleTilt(c));
+    if (nearlyEqual(w, h)) {
+      const s = (w + h) / 2;
+      return { type: 'square', x, y, w: s, h: s };
     }
-  }
+    return { type: 'rectangle', x, y, w, h };
+  },
 
-  if (fill >= 0.66 && fill <= 0.9) {
-    // Mean deviation of each point from the bbox-inscribed ellipse.
+  triangle({ points, diag }) {
+    const c = corners(points, diag, CLOSE_GAP);
+    if (c.length !== 3) return null;
+    const { cx, cy, local } = centerPoints(c); // kept as drawn, tilt included
+    return { type: 'triangle', x: cx, y: cy, points: local };
+  },
+
+  circle({ points, diag, w: bw, h: bh }) {
+    // A rectangle or triangle with rounded corners can be as close to an ellipse as a lopsided
+    // circle, but its corners still count as 3 or 4. Recorded circles find 6 or more.
+    const n = corners(points, diag, CLOSE_GAP).length;
+    if (n === 3 || n === 4) return null;
+    // Hand-drawn circles often come out slightly egg-shaped along a diagonal, so a stroke whose
+    // bounding box is about square is judged as a circle in that box. Only a clear oval is measured
+    // along its own axes; a long oval on a diagonal is far from its box's circle and fails below.
+    const tilt = nearlyEqual(bw, bh) ? 0 : ovalTilt(points, diag);
+    if (Math.abs(tilt) > MAX_OVAL_TILT) return null; // a diagonal oval, which shapes can't be
+    const { pts, b, x, y, w, h } = untilted(points, tilt);
+    const round = nearlyEqual(w, h);
     const rx = w / 2, ry = h / 2;
-    const dev = ellipseDeviation(points, cx, cy, rx, ry);
+    // Mean deviation of each point from the inscribed ellipse: loose, since corners are checked above.
+    if (ellipseDeviation(pts, (b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2, rx, ry) >= ELLIPSE_DEVIATION) return null;
     // An ellipse's narrow ends turn sharply too, so allow for its curvature there.
     const span = Math.max(10, diag * 0.08);
     const endTurn = (2 * span * Math.max(rx, ry)) / Math.min(rx, ry) ** 2;
     const limit = Math.max((55 * Math.PI) / 180, endTurn + (20 * Math.PI) / 180);
-    const smooth = sharpestTurn(movingAverage(points, 2), span) < limit;
-    if (dev < 0.11 && smooth) {
-      if (nearlyEqual(w, h)) {
-        const r = (rx + ry) / 2;
-        return { type: 'circle', x: cx, y: cy, rx: r, ry: r };
-      }
-      return { type: 'ellipse', x: cx, y: cy, rx, ry };
+    if (sharpestTurn(movingAverage(points, 2), span) >= limit) return null; // has a corner
+    if (round) {
+      const r = (rx + ry) / 2;
+      return { type: 'circle', x, y, rx: r, ry: r };
     }
+    return { type: 'ellipse', x, y, rx, ry };
+  },
+};
+
+/** A tilt angle folded into ±45°: how far the nearest axis is from horizontal or vertical. */
+const fold = (a: number) => a - (Math.PI / 2) * Math.round(a / (Math.PI / 2));
+
+/** A rectangle's tilt: the average direction of its edges, weighted by length. */
+function rectangleTilt(c: Pt[]): number {
+  // Edges 90° apart point the same way at 4× their angle, so averaging there gives the tilt.
+  let sx = 0, sy = 0;
+  for (let i = 0; i < c.length; i++) {
+    const [a, b] = [c[i], c[(i + 1) % c.length]];
+    const t = 4 * Math.atan2(b[1] - a[1], b[0] - a[0]);
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    sx += Math.cos(t) * len;
+    sy += Math.sin(t) * len;
   }
-  return null;
+  return Math.atan2(sy, sx) / 4;
+}
+
+/** An oval's tilt: the direction of its long axis, from the spread of points evenly spaced along it. */
+function ovalTilt(points: Pt[], diag: number): number {
+  const pts = resampleBySpacing(points, diag / 100); // even spacing, so slow stretches don't count extra
+  let mx = 0, my = 0;
+  for (const [x, y] of pts) {
+    mx += x / pts.length;
+    my += y / pts.length;
+  }
+  let sxx = 0, syy = 0, sxy = 0;
+  for (const [x, y] of pts) {
+    sxx += (x - mx) ** 2;
+    syy += (y - my) ** 2;
+    sxy += (x - mx) * (y - my);
+  }
+  return fold(Math.atan2(2 * sxy, sxx - syy) / 2);
+}
+
+/**
+ * The stroke turned back by `tilt` so its axes are horizontal and vertical, with its bounds there,
+ * its size, and the middle of those bounds turned back to where the stroke was drawn.
+ */
+function untilted(points: Pt[], tilt: number) {
+  const cos = Math.cos(-tilt), sin = Math.sin(-tilt);
+  const pts = points.map(([px, py]) => [px * cos - py * sin, px * sin + py * cos] as Pt);
+  const b = pointsBounds(pts);
+  const mx = (b.minX + b.maxX) / 2, my = (b.minY + b.maxY) / 2;
+  return { pts, b, x: mx * cos + my * sin, y: -mx * sin + my * cos, w: b.maxX - b.minX, h: b.maxY - b.minY };
 }
 
 /** Turns a recognition result into a shape in the current line color and fill. */

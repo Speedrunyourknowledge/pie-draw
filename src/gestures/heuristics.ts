@@ -161,3 +161,59 @@ export function ellipseDeviation(points: Pt[], cx: number, cy: number, rx: numbe
   for (const [x, y] of points) dev += Math.abs(Math.hypot((x - cx) / rx, (y - cy) / ry) - 1);
   return dev / points.length;
 }
+
+// ---- scribble erase ----
+
+/** A turn at least this sharp is a cusp (a direction reversal). Triangle corners turn ~120°. */
+export const CUSP_ANGLE = (135 * Math.PI) / 180;
+/** Cusps a stroke needs to count as a scribble. A triangle has at most 3 sharp turns. */
+export const SCRIBBLE_CUSPS = 4;
+/** Screen pixels of stroke on each side of a point that its turn is measured over, so jitter isn't a cusp. */
+export const CUSP_SPAN_PX = 10;
+/** Screen pixels a scribble may pass outside a shape and still erase it. */
+export const SCRIBBLE_HIT_PX = 6;
+
+/** Points spaced `step` apart along the stroke (the last one may be closer). */
+export function resampleBySpacing(points: Pt[], step: number): Pt[] {
+  if (points.length === 0 || step <= 0) return points.slice();
+  const out: Pt[] = [points[0]];
+  let prev = points[0];
+  let carried = 0; // distance walked since the last emitted point
+  for (let i = 1; i < points.length; i++) {
+    const cur = points[i];
+    let d = dist(prev, cur);
+    while (carried + d >= step && d > 0) {
+      const t = (step - carried) / d;
+      prev = [prev[0] + (cur[0] - prev[0]) * t, prev[1] + (cur[1] - prev[1]) * t];
+      out.push(prev);
+      d = dist(prev, cur);
+      carried = 0;
+    }
+    carried += d;
+    prev = cur;
+  }
+  if (carried > 0) out.push(points[points.length - 1]);
+  return out;
+}
+
+/**
+ * Number of sharp direction changes along a stroke. The turn at each point is measured between the
+ * chords `span` long before and after it; a run of points over CUSP_ANGLE counts as one cusp.
+ */
+export function cuspCount(points: Pt[], span: number): number {
+  const step = span / 5;
+  const pts = resampleBySpacing(points, step);
+  const k = 5; // points per span
+  let count = 0;
+  let inCusp = false;
+  for (let i = k; i < pts.length - k; i++) {
+    const sharp = turnAngle(pts[i - k], pts[i], pts[i + k]) >= CUSP_ANGLE;
+    if (sharp && !inCusp) count++;
+    inCusp = sharp;
+  }
+  return count;
+}
+
+export function isScribble(points: Pt[], span: number): boolean {
+  return cuspCount(points, span) >= SCRIBBLE_CUSPS;
+}
