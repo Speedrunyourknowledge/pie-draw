@@ -142,7 +142,7 @@ Accuracy is measured by classifying each test stroke once. Timing is measured se
 
 ## AI Assistance
 
-The code that implements Penny Pincher and connects it to the heuristic pipeline was written with AI assistance so that I could spend more time on designing the gesture set. The design decisions are my own: which gestures trigger which actions, the conditions under which each gesture is accepted, and how the UI works (e.g. pie menu, tools). I also recorded all of the gesture samples myself.
+The code that implements Penny Pincher and connects it to the heuristic pipeline was written with AI assistance so that I could spend more time on designing the gesture set. The design decisions are my own: which gestures trigger which actions, the conditions for accepting each gesture, and how the UI works (e.g. pie menu, tools). I also recorded all of the gesture samples myself.
 
 ## References
 
