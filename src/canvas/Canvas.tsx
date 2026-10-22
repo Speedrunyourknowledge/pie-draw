@@ -862,8 +862,10 @@ export function Canvas() {
             />
           )}
         </g>
-        {/* While a box is being dragged, only outline what it touches; the group box comes on release. */}
-        {selected.length > 0 && mode !== 'drawing' && (
+        {/* While a box is being dragged, only outline what it touches; the group box comes on release.
+            It stays up while drawing, since a gesture stroke (copy, cut, color...) acts on it, but not
+            while the create tool drags out a new shape. */}
+        {selected.length > 0 && !(mode === 'drawing' && tool === 'create') && (
           <SelectionHandles shapes={selected} view={view} preview={mode === 'selecting'} />
         )}
         {lassoHits && lassoHits.length > 0 && <SelectionHandles shapes={lassoHits} view={view} preview />}
