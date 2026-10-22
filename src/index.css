@@ -761,6 +761,7 @@ svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo {
 }
 .guide-note { color: var(--muted); font-size: 14px; }
 .guide-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 20px; }
+.guide-grid.single { grid-template-columns: 1fr; } /* a lone item gets the full width for its hint */
 @media (max-width: 700px) { .guide-grid { grid-template-columns: 1fr; } }
 .guide-item { display: flex; align-items: center; gap: 12px; margin: 0; }
 .guide-thumb {

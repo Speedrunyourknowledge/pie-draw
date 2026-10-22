@@ -9,8 +9,9 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "docs:pies": "node scripts/render-pie-menus.mjs",
+    "docs:gestures": "node scripts/render-gesture-guide.mjs",
     "test": "vitest run",
-    "eval": "EVAL=1 vitest run src/interaction/accuracy.test.ts --silent=false"
+    "eval": "node scripts/eval.mjs"
   },
   "dependencies": {
     "react": "^19.2.8",

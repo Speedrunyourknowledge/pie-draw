@@ -14,7 +14,7 @@ const EXAMPLE_VIEW = `${-PAD} ${-PAD} ${EXAMPLE_BOX + 2 * PAD} ${EXAMPLE_BOX + 2
 /** Scribble erase is a heuristic, not a template, so it gets a drawn illustration instead of a sample. */
 const SCRIBBLE: Pt[] = [[14, 22], [50, 18], [12, 32], [52, 28], [14, 42], [50, 38], [16, 50]];
 
-/** Reference of every gesture and what it does, built from the gesture config and recorded samples. */
+/** The gesture reference panel. */
 export function GestureGuide() {
   const open = useStore((s) => s.gestureGuideOpen);
   const swapped = useStore((s) => s.panelSwapped);
@@ -33,59 +33,71 @@ export function GestureGuide() {
             <svg viewBox="0 0 20 20"><path d="M5 5 L15 15 M15 5 L5 15" /></svg>
           </button>
         </header>
-        <p>
-          With <b>Gestures</b> on (top bar, or <Key>G</Key>), draw one of these in a single stroke. Each picture starts at
-          the <span className="guide-start" aria-hidden /> green dot and follows the arrows. Turn Gestures off to draw freely.
-        </p>
-
-        {GESTURE_SECTIONS.map(({ name, note }) => (
-          <section key={name}>
-            <h3>{name}</h3>
-            <p className="guide-note">{note}</p>
-            <div className="guide-grid">
-              {GESTURES.filter((g) => sectionOf(g.action) === name).map((g) => {
-                const example = examples.get(g.label); // prescaled by record mode, so it's only drawn
-                return (
-                  <figure className="guide-item" key={g.label}>
-                    {example ? (
-                      <svg className="guide-thumb" viewBox={EXAMPLE_VIEW} aria-hidden>
-                        <StrokeMarks points={example.points} scale={0.9} />
-                      </svg>
-                    ) : (
-                      <div className="guide-thumb missing" title="No samples recorded yet (record them with RECORD_MODE=true)">
-                        not recorded
-                      </div>
-                    )}
-                    <figcaption>
-                      <b>
-                        {g.action.kind === 'setColor' && <span className="guide-swatch" style={{ background: g.action.color }} />}
-                        {describeAction(g.action)}
-                      </b>
-                      <span>{g.hint}</span>
-                    </figcaption>
-                  </figure>
-                );
-              })}
-            </div>
-          </section>
-        ))}
-
-        <section>
-          <h3>Delete</h3>
-          <div className="guide-grid">
-            <figure className="guide-item">
-              <svg className="guide-thumb" viewBox={`0 0 ${THUMB} ${THUMB}`} aria-hidden>
-                <rect className="guide-target" x="18" y="16" width="28" height="32" />
-                <StrokeMarks points={SCRIBBLE} scale={0.45} />
-              </svg>
-              <figcaption>
-                <b>Delete the shapes it crosses</b>
-                <span>Scribble rapidly back and forth over one or more shapes</span>
-              </figcaption>
-            </figure>
-          </div>
-        </section>
+        <GestureList />
       </div>
     </div>
+  );
+}
+
+/**
+ * Every gesture and what it does, built from the gesture config and recorded samples. Kept apart from
+ * the panel, which reads the store, so `npm run docs:gestures` can render it for the README.
+ */
+export function GestureList() {
+  return (
+    <>
+      <p>
+        With <b>gestures</b> enabled (top bar, or <Key>G</Key>), draw one of these in a single stroke. Each picture starts at
+        the <span className="guide-start" aria-hidden /> green dot and follows the arrows. Turn gestures off to draw freely.
+      </p>
+
+      {GESTURE_SECTIONS.map(({ name, note }) => (
+        <section key={name}>
+          <h3>{name}</h3>
+          <p className="guide-note">{note}</p>
+          <div className="guide-grid">
+            {GESTURES.filter((g) => sectionOf(g.action) === name).map((g) => {
+              const example = examples.get(g.label); // prescaled by record mode, so it's only drawn
+              return (
+                <figure className="guide-item" key={g.label}>
+                  {example ? (
+                    <svg className="guide-thumb" viewBox={EXAMPLE_VIEW} aria-hidden>
+                      <StrokeMarks points={example.points} scale={0.9} />
+                    </svg>
+                  ) : (
+                    <div className="guide-thumb missing" title="No samples recorded yet (record them with RECORD_MODE=true)">
+                      not recorded
+                    </div>
+                  )}
+                  <figcaption>
+                    <b>
+                      {g.action.kind === 'setColor' && <span className="guide-swatch" style={{ background: g.action.color }} />}
+                      {describeAction(g.action)}
+                    </b>
+                    <span>{g.hint}</span>
+                  </figcaption>
+                </figure>
+              );
+            })}
+          </div>
+        </section>
+      ))}
+
+      <section>
+        <h3>Delete</h3>
+        <div className="guide-grid single">
+          <figure className="guide-item">
+            <svg className="guide-thumb" viewBox={`0 0 ${THUMB} ${THUMB}`} aria-hidden>
+              <rect className="guide-target" x="18" y="16" width="28" height="32" />
+              <StrokeMarks points={SCRIBBLE} scale={0.45} />
+            </svg>
+            <figcaption>
+              <b>Delete the shapes it crosses</b>
+              <span>Scribble rapidly back and forth over one or more shapes</span>
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+    </>
   );
 }
