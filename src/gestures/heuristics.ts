@@ -34,6 +34,30 @@ export function polygonArea(pts: Pt[]): number {
   return Math.abs(signedArea(pts));
 }
 
+/** Convex hull of the points, counterclockwise in math terms (Andrew's monotone chain). */
+export function convexHull(points: Pt[]): Pt[] {
+  const pts = points.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (pts.length < 3) return pts;
+  const cross = (o: Pt, a: Pt, b: Pt) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lower: Pt[] = [], upper: Pt[] = [];
+  for (const p of pts) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+    lower.push(p);
+  }
+  for (let i = pts.length - 1; i >= 0; i--) {
+    const p = pts[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+    upper.push(p);
+  }
+  return [...lower.slice(0, -1), ...upper.slice(0, -1)];
+}
+
+/** A loop's area over its convex hull's area: 1 for a convex loop, lower the deeper its dents. */
+export function convexity(points: Pt[]): number {
+  const hull = polygonArea(convexHull(points));
+  return hull === 0 ? 0 : polygonArea(points) / hull;
+}
+
 /** Whether a loop runs clockwise as seen on screen (y down). */
 export function isClockwise(pts: Pt[]): boolean {
   return signedArea(pts) > 0;

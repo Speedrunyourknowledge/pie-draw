@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { makePrimitive, shapeNearPoint } from '../geometry';
+import { makePrimitive, shapeInLasso, shapeNearPoint } from '../geometry';
 import type { Pt } from '../types';
 import { SCRIBBLE_CUSPS, cuspCount, isScribble } from './heuristics';
 
@@ -55,3 +55,23 @@ describe('shapeNearPoint', () => {
     expect(shapeNearPoint(ellipse, [92, 55], 6)).toBe(false); // bbox corner, outside the ellipse
   });
 });
+
+describe('shapeInLasso', () => {
+  const box = (x0: number, y0: number, x1: number, y1: number): Pt[] => [[x0, y0], [x0, y1], [x1, y1], [x1, y0]];
+
+  it('selects a shape whose center is inside the loop', () => {
+    const rect = makePrimitive('rectangle', 100, 100, '#000', null); // 180 × 110 around (100, 100)
+    expect(shapeInLasso(rect, box(0, 0, 200, 200))).toBe(true); // all inside
+    expect(shapeInLasso(rect, box(60, 60, 260, 260))).toBe(true); // a loose loop through it, around its center
+    expect(shapeInLasso(rect, box(150, 0, 300, 200))).toBe(false); // grazes its right side only
+    expect(shapeInLasso(rect, box(300, 0, 400, 200))).toBe(false); // elsewhere
+  });
+
+  it('works for every kind of shape', () => {
+    const around = box(-300, -300, 300, 300);
+    for (const type of ['square', 'circle', 'ellipse', 'triangle'] as const) {
+      expect(shapeInLasso(makePrimitive(type, 0, 0, '#000', null), around)).toBe(true);
+    }
+  });
+});
+

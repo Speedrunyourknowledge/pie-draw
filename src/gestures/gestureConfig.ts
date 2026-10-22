@@ -48,7 +48,7 @@ export const GESTURES: readonly GestureDef[] = [
   { label: 'rectangle', hint: 'Closed loop with 4 corners, clockwise', action: { kind: 'createShape', family: 'rectangle' }, anyStart: true, anyRotation: true },
   { label: 'circle', hint: 'Round closed loop, clockwise', action: { kind: 'createShape', family: 'circle' }, anyStart: true, anyRotation: true },
   { label: 'triangle', hint: 'Closed loop with 3 corners, clockwise', action: { kind: 'createShape', family: 'triangle' }, anyStart: true, anyRotation: true },
-  { label: 'lasso', hint: 'Closed loop, counterclockwise', action: { kind: 'lasso' }, anyStart: true, anyRotation: true },
+  { label: 'lasso', hint: 'Closed loop, counterclockwise; wobbles and slight dents are fine', action: { kind: 'lasso' }, anyStart: true, anyRotation: true },
   { label: 'copy', hint: 'Letter C', action: { kind: 'copy' } },
   { label: 'cut', hint: 'Forward slash, either direction', action: { kind: 'cut' }, eitherDirection: true },
   { label: 'paste', hint: 'Upside down caret, either direction', action: { kind: 'paste' }, eitherDirection: true },

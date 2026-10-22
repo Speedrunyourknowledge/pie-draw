@@ -123,6 +123,15 @@ export function shapeTouchesRect(s: Shape, r: Bounds): boolean {
   }
 }
 
+/**
+ * Whether a lasso loop selects a shape: its center (the middle of its bounding box) is inside the
+ * loop. This forgives a loose loop that cuts through the shape, and skips a neighbor it only grazes.
+ */
+export function shapeInLasso(s: Shape, loop: Pt[]): boolean {
+  const b = worldBounds(s);
+  return pointInPolygon([(b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2], loop);
+}
+
 /** Recenters points on their bounding-box center. Returns the center and the local points. */
 export function centerPoints(points: Pt[]): { cx: number; cy: number; local: Pt[] } {
   const b = pointsBounds(points);

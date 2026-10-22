@@ -9,7 +9,8 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "docs:pies": "node scripts/render-pie-menus.mjs",
-    "test": "vitest run"
+    "test": "vitest run",
+    "eval": "EVAL=1 vitest run src/interaction/accuracy.test.ts --silent=false"
   },
   "dependencies": {
     "react": "^19.2.8",

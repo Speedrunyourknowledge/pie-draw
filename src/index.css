@@ -470,6 +470,7 @@ svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo {
   stroke-opacity: 0.45;
   pointer-events: none;
 }
+.lasso-fill { fill: rgba(62, 99, 221, 0.08); pointer-events: none; } /* as the marquee: this stroke will select */
 .marquee {
   fill: rgba(62, 99, 221, 0.08);
   stroke: var(--accent);
@@ -624,7 +625,7 @@ svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo {
 .rec-help { margin: auto 6px 4px; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .record-main {
   display: grid;
-  grid-template-rows: auto 1fr auto auto;
+  grid-template-rows: auto auto 1fr auto auto;
   gap: 10px;
   padding: 14px 16px 16px;
   min-width: 0;
@@ -636,6 +637,11 @@ svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo {
 .rec-prompt .rec-progress { float: right; font-weight: 600; color: inherit; }
 .rec-prompt .rec-progress.done { color: #1e7b4f; }
 .rec-prompt .rec-progress .dirty { color: var(--accent); font-weight: 400; }
+.rec-set { display: flex; justify-self: start; border: 1px solid var(--panel-line); border-radius: 8px; overflow: hidden; }
+.record .rec-set button { border: 0; border-radius: 0; background: transparent; }
+.record .rec-set button + button { border-left: 1px solid var(--panel-line); }
+.record .rec-set button.on { background: #e8edfc; color: var(--accent); font-weight: 600; }
+.rec-set-count { margin-left: 4px; color: var(--muted); font-weight: 400; font-size: 12px; }
 .rec-pad {
   width: 100%;
   height: 100%;
@@ -656,6 +662,7 @@ svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo {
 .rec-next { color: var(--muted); }
 .rec-good { color: #1e7b4f; }
 .rec-bad { color: #c62a2f; }
+.rec-warn { color: #a86a0c; }
 .rec-samples { display: flex; flex-wrap: wrap; gap: 8px; max-height: 196px; overflow-y: auto; }
 .rec-thumb {
   position: relative;
@@ -668,6 +675,7 @@ svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo {
   text-align: center;
 }
 .rec-thumb.bad { border-color: #e5484d; box-shadow: 0 0 0 1px #e5484d; }
+.rec-thumb.rescued { border-color: #e2a336; box-shadow: 0 0 0 1px #e2a336; }
 .rec-thumb svg { width: 72px; height: 72px; display: block; }
 .rec-thumb figcaption { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .record .rec-del {
@@ -781,7 +789,7 @@ svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo {
   vertical-align: -1px;
 }
 /* The sample the gesture reference shows; ★ pins one, otherwise the most typical one is used. */
-.rec-thumb.shown:not(.bad) { border-color: var(--accent); }
+.rec-thumb.shown:not(.bad):not(.rescued) { border-color: var(--accent); }
 .rec-example { color: var(--accent); }
 .record .rec-star {
   position: absolute;

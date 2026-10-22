@@ -12,40 +12,59 @@ import {
   serializeTemplateFile,
   type Sample,
 } from '../gestures/templates';
+import holdoutData from '../gestures/holdout.json';
+import { gestureOf } from '../interaction/recognize';
 import { isMod, kbd } from '../platform';
 import { useStore } from '../store';
 import type { Pt } from '../types';
 import { StrokeMarks } from './StrokeMarks';
 
 /**
- * Hidden mode for recording gesture training samples, opened by starting the app with RECORD_MODE=true.
- * Pick a label, draw, accept or discard, and save the set to src/gestures/templates.json.
+ * Hidden mode for recording gesture samples, opened by starting the app with RECORD_MODE=true.
+ * Pick a label, draw, accept or discard, and save. Samples are recorded either as templates
+ * (src/gestures/templates.json, which the recognizer uses) or as test strokes
+ * (src/gestures/holdout.json, never used as templates, only to measure accuracy).
  * Unsaved work is kept in localStorage, so a reload doesn't lose it.
  */
 
 const DRAFT_KEY = 'pie-draw:record-draft';
 const LABEL_KEY = 'pie-draw:record-label';
+const SET_KEY = 'pie-draw:record-set';
 const MIN_LENGTH = 20; // px; shorter strokes are taken as slips and ignored
-const TARGET = 10; // samples per label before it counts as covered (the assignment asks for 5–10)
+const TARGET = { templates: 10, test: 5 }; // per label before it counts as covered (the assignment asks for 5–10 templates)
+
+type SampleSet = keyof typeof TARGET;
 
 interface Rec extends Sample {
   id: number;
+  /** A test stroke, saved to holdout.json rather than used as a template. */
+  test?: boolean;
 }
+
+const heldOut: Sample[] = parseTemplateFile(holdoutData).samples;
 
 /** An undoable change: a kept sample, or a deleted one and where it was in the list. */
 type Edit = { kind: 'keep'; id: number } | { kind: 'delete'; rec: Rec; index: number };
 
 let nextId = 1;
-const withIds = (samples: Sample[]): Rec[] => samples.map((s) => ({ ...s, id: nextId++ }));
+const withIds = (samples: Sample[], test = false): Rec[] => samples.map((s) => ({ ...s, id: nextId++, ...(test ? { test } : {}) }));
+const fromFiles = (templates: Sample[], test: Sample[]): Rec[] => [...withIds(templates), ...withIds(test, true)];
+/** Both files' contents for a set of samples, as they would be saved. */
+const filesOf = (samples: Rec[]) => ({
+  templates: serializeTemplateFile(samples.filter((s) => !s.test)),
+  holdout: serializeTemplateFile(samples.filter((s) => s.test).map(({ label, points }) => ({ label, points }))),
+});
+type Files = ReturnType<typeof filesOf>;
+const parseFiles = (f: Files): Rec[] => fromFiles(parseTemplateFile(JSON.parse(f.templates)).samples, parseTemplateFile(JSON.parse(f.holdout)).samples);
 /** A sample as it's saved (points rounded), ignoring the example flag, to tell saved samples from new ones. */
 const sampleKey = (s: Sample) => serializeTemplateFile([{ label: s.label, points: s.points }]);
 
-function readDraft(): Sample[] | null {
+function readDraft(): Rec[] | null {
   try {
     const raw = localStorage.getItem(DRAFT_KEY);
-    return raw ? parseTemplateFile(JSON.parse(raw)).samples : null;
+    return raw ? parseFiles(JSON.parse(raw)) : null;
   } catch {
-    return null;
+    return null; // none, or one saved before test strokes existed
   }
 }
 
@@ -59,16 +78,33 @@ function store(key: string, value: string | null) {
 }
 
 /**
- * Leave-one-out: each sample recognized against every other sample. A sample whose class has no
+ * How a stroke fares: the recognizer's best match, and what the app ends up doing with it once the
+ * heuristics have run. "rescued" means the recognizer alone got it wrong but the heuristics fixed it.
+ */
+interface Check {
+  match: Match | null;
+  /** The gesture the app acts on, or null if the stroke stays freehand. */
+  result: string | null;
+  status: 'ok' | 'rescued' | 'bad';
+}
+
+function check(s: Sample, templates: Template[]): Check {
+  const match = rank(s.points, templates)[0] ?? null;
+  const result = gestureOf(s.points, templates);
+  const recognizerOk = !!match && match.label === s.label && match.score >= REJECT_THRESHOLD;
+  return { match, result, status: result !== s.label ? 'bad' : recognizerOk ? 'ok' : 'rescued' };
+}
+
+/**
+ * Leave-one-out: each sample checked against every other sample. A sample whose class has no
  * other samples can't be matched yet, so it gets no result.
  */
-function leaveOneOut(samples: Rec[]): Map<number, Match | null> {
+function leaveOneOut(samples: Rec[]): Map<number, Check> {
   const temps = new Map<number, Template[]>(samples.map((s) => [s.id, sampleTemplates(s)]));
-  const out = new Map<number, Match | null>();
+  const out = new Map<number, Check>();
   for (const s of samples) {
     if (!samples.some((o) => o.id !== s.id && o.label === s.label)) continue;
-    const others = samples.flatMap((o) => (o.id !== s.id ? temps.get(o.id)! : []));
-    out.set(s.id, rank(s.points, others)[0] ?? null);
+    out.set(s.id, check(s, samples.flatMap((o) => (o.id !== s.id ? temps.get(o.id)! : []))));
   }
   return out;
 }
@@ -80,8 +116,17 @@ export function RecordMode() {
 }
 
 function Recorder() {
-  const [saved, setSaved] = useState(() => serializeTemplateFile(recordedSamples));
-  const [samples, setSamples] = useState<Rec[]>(() => withIds(readDraft() ?? recordedSamples));
+  const onDisk = () => filesOf(fromFiles(recordedSamples, heldOut));
+  const [saved, setSaved] = useState<Files>(onDisk);
+  const [samples, setSamples] = useState<Rec[]>(() => readDraft() ?? fromFiles(recordedSamples, heldOut));
+  const [set, setSet] = useState<SampleSet>(() => {
+    try {
+      if (localStorage.getItem(SET_KEY) === 'test') return 'test';
+    } catch {
+      // fall through
+    }
+    return 'templates';
+  });
   const [label, setLabel] = useState(() => {
     try {
       const l = localStorage.getItem(LABEL_KEY);
@@ -101,64 +146,79 @@ function Recorder() {
   const drawing = useRef<Pt[] | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
-  const json = useMemo(() => serializeTemplateFile(samples), [samples]);
-  const dirty = json !== saved;
+  const files = useMemo(() => filesOf(samples), [samples]);
+  const dirty = files.templates !== saved.templates || files.holdout !== saved.holdout;
+  const trainSamples = useMemo(() => samples.filter((s) => !s.test), [samples]);
 
   // Keep unsaved work across reloads.
-  useEffect(() => store(DRAFT_KEY, dirty ? json : null), [json, dirty]);
+  useEffect(() => store(DRAFT_KEY, dirty ? JSON.stringify(files) : null), [files, dirty]);
   useEffect(() => store(LABEL_KEY, label), [label]);
+  useEffect(() => store(SET_KEY, set), [set]);
 
-  // The file on disk changed under us (saved, or edited by hand) and there's no draft: show it.
+  // The files on disk changed under us (saved, or edited by hand) and there's no draft: show them.
   useEffect(() => {
-    const file = serializeTemplateFile(recordedSamples);
-    if (file !== saved && !dirty) {
-      setSaved(file);
-      setSamples(withIds(recordedSamples));
+    const disk = onDisk();
+    if ((disk.templates !== saved.templates || disk.holdout !== saved.holdout) && !dirty) {
+      setSaved(disk);
+      setSamples(fromFiles(recordedSamples, heldOut));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- recordedSamples changes only on module reload
-  }, [recordedSamples]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the files change only on module reload
+  }, [recordedSamples, heldOut]);
 
   // Configured gestures first, then any labels in the data that the config no longer has.
   const labels = useMemo(() => {
     const extra = [...new Set(samples.map((s) => s.label))].filter((l) => !gestureFor(l));
     return [...GESTURES.map((g) => g.label), ...extra];
   }, [samples]);
+  /** Templates and test strokes per label. */
   const counts = useMemo(() => {
-    const c = new Map<string, number>();
-    for (const s of samples) c.set(s.label, (c.get(s.label) ?? 0) + 1);
+    const c = new Map<string, { templates: number; test: number }>();
+    for (const s of samples) {
+      const n = c.get(s.label) ?? { templates: 0, test: 0 };
+      n[s.test ? 'test' : 'templates']++;
+      c.set(s.label, n);
+    }
     return c;
   }, [samples]);
 
-  // Samples not yet in the saved file, so the counts show what a save would add.
+  // Samples not yet in the saved files, so the counts show what a save would add.
   const unsaved = useMemo(() => {
+    const key = (s: Rec) => (s.test ? 'test:' : 'templates:') + sampleKey(s);
     const left = new Map<string, number>();
-    for (const s of parseTemplateFile(JSON.parse(saved)).samples) left.set(sampleKey(s), (left.get(sampleKey(s)) ?? 0) + 1);
+    for (const s of parseFiles(saved)) left.set(key(s), (left.get(key(s)) ?? 0) + 1);
     const out = new Set<number>();
     for (const s of samples) {
-      const k = sampleKey(s), n = left.get(k) ?? 0;
+      const k = key(s), n = left.get(k) ?? 0;
       if (n > 0) left.set(k, n - 1);
       else out.add(s.id);
     }
     return out;
   }, [samples, saved]);
 
-  const templates = useMemo(() => buildTemplates(samples), [samples]);
-  const loo = useMemo(() => leaveOneOut(samples), [samples]);
+  const templates = useMemo(() => buildTemplates(trainSamples), [trainSamples]);
+  // Templates are checked against the other templates; test strokes against all of them.
+  const checks = useMemo(() => {
+    const out = leaveOneOut(trainSamples);
+    for (const s of samples) if (s.test) out.set(s.id, check(s, templates));
+    return out;
+  }, [samples, trainSamples, templates]);
+  const statusOf = (s: Rec) => checks.get(s.id)?.status ?? 'ok';
   const matches = useMemo(() => (pending ? rank(pending, templates).slice(0, 3) : []), [pending, templates]);
-  const ofLabel = samples.filter((s) => s.label === label);
+  const pendingResult = useMemo(() => (pending ? gestureOf(pending, templates) : null), [pending, templates]);
+  const ofLabel = samples.filter((s) => s.label === label && !!s.test === (set === 'test'));
   const unsavedOfLabel = ofLabel.filter((s) => unsaved.has(s.id)).length;
-  const shown = useMemo(() => exampleSample(label, samples), [label, samples]); // the reference's picture
-  const failing = samples.filter((s) => {
-    const m = loo.get(s.id);
-    return m && (m.label !== s.label || m.score < REJECT_THRESHOLD);
-  }).length;
+  const shown = useMemo(() => exampleSample(label, trainSamples), [label, trainSamples]); // the reference's picture
+  const failing = samples.filter((s) => statusOf(s) === 'bad').length;
+  const rescued = samples.filter((s) => statusOf(s) === 'rescued').length;
+  const target = TARGET[set];
+  const noun = set === 'test' ? 'test strokes' : 'templates';
   const def = gestureFor(label);
 
   const flash = (text: string, error = false) => setMessage({ text, error });
 
   const accept = (points: Pt[] | null = pending) => {
     if (!points) return;
-    const rec = { label, points, id: nextId++ };
+    const rec: Rec = { label, points, id: nextId++, ...(set === 'test' ? { test: true } : {}) };
     setSamples((s) => [...s, rec]);
     setHistory((h) => [...h, { kind: 'keep', id: rec.id }]);
     setPending(null);
@@ -188,23 +248,25 @@ function Recorder() {
   const save = async () => {
     try {
       // The gesture reference's pictures are worked out here, once, and saved alongside the samples.
-      const body = JSON.stringify({ templates: json, examples: serializeExamplesFile(samples) });
+      const body = JSON.stringify({ ...files, examples: serializeExamplesFile(trainSamples) });
       const res = await fetch('/__gesture-templates', { method: 'POST', body });
       if (!res.ok) throw new Error(await res.text());
-      setSaved(json);
-      flash(`Saved ${unsaved.size} new (${samples.length} in all) to src/gestures/templates.json and examples.json`);
+      setSaved(files);
+      const tests = samples.length - trainSamples.length;
+      flash(`Saved ${unsaved.size} new (${trainSamples.length} templates, ${tests} test strokes in all) to src/gestures/`);
     } catch (err) {
       flash(`Save failed: ${err instanceof Error ? err.message : err}. Use Download instead.`, true);
     }
   };
 
-  /** Both files, for copying into src/gestures/ by hand when there's no dev server to save to. */
+  /** The files, for copying into src/gestures/ by hand when there's no dev server to save to. */
   const download = () => {
-    const files: [string, string][] = [
-      ['templates.json', json],
-      ['examples.json', serializeExamplesFile(samples)],
+    const out: [string, string][] = [
+      ['templates.json', files.templates],
+      ['holdout.json', files.holdout],
+      ['examples.json', serializeExamplesFile(trainSamples)],
     ];
-    for (const [name, text] of files) {
+    for (const [name, text] of out) {
       const a = document.createElement('a');
       a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
       a.download = name;
@@ -216,20 +278,20 @@ function Recorder() {
   const importFile = async (file: File) => {
     try {
       const more = parseTemplateFile(JSON.parse(await file.text())).samples;
-      setSamples((s) => [...s, ...withIds(more)]);
-      flash(`Added ${more.length} samples from ${file.name}`);
+      setSamples((s) => [...s, ...withIds(more, set === 'test')]);
+      flash(`Added ${more.length} ${noun} from ${file.name}`);
     } catch (err) {
       flash(`Couldn't import ${file.name}: ${err instanceof Error ? err.message : err}`, true);
     }
   };
 
-  /** Loads the templates.json from before the last save, as unsaved changes; saving makes it current again. */
+  /** Loads the files from before the last save, as unsaved changes; saving makes them current again. */
   const restoreBackup = async () => {
     try {
       const res = await fetch('/__gesture-templates/backup');
       if (!res.ok) throw new Error(await res.text());
-      const backup = parseTemplateFile(await res.json()).samples;
-      setSamples(withIds(backup));
+      const backup = parseFiles(await res.json());
+      setSamples(backup);
       setHistory([]);
       setPending(null);
       flash(`Loaded ${backup.length} samples from before the last save. Save to keep them, or Revert.`);
@@ -239,10 +301,10 @@ function Recorder() {
   };
 
   const revert = () => {
-    setSamples(withIds(recordedSamples));
+    setSamples(fromFiles(recordedSamples, heldOut));
     setHistory([]);
     setPending(null);
-    flash('Reverted to templates.json');
+    flash('Reverted to the saved files');
   };
 
   // ---- drawing pad ----
@@ -314,7 +376,8 @@ function Recorder() {
         <div className="record-title">
           <span className="rec-dot" /> Record gestures
           <span className="record-total">
-            {samples.length} samples{failing > 0 && <> · <span className="rec-bad">{failing} misrecognized</span></>}
+            {trainSamples.length} templates · {samples.length - trainSamples.length} test strokes{failing > 0 && <> · <span className="rec-bad">{failing} misrecognized</span></>}
+            {rescued > 0 && <> · <span className="rec-warn" title="The recognizer alone got these wrong; the heuristics corrected them">{rescued} fixed by heuristics</span></>}
             {unsaved.size > 0 && <span className="dirty"> · {unsaved.size} new, not saved yet</span>}
             {dirty && unsaved.size === 0 && <span className="dirty" title="Unsaved changes"> • unsaved</span>}
           </span>
@@ -323,7 +386,7 @@ function Recorder() {
           <label className="rec-check" title="Keep every stroke without pressing Enter (undo with ⌘Z / Ctrl+Z)">
             <input type="checkbox" checked={autoAccept} onChange={(e) => setAutoAccept(e.target.checked)} /> Auto-accept
           </label>
-          <button onClick={() => fileInput.current!.click()} title="Add the samples from a templates.json file">Import…</button>
+          <button onClick={() => fileInput.current!.click()} title={`Add the samples from a templates.json file as ${noun}`}>Import…</button>
           <input
             ref={fileInput}
             type="file"
@@ -336,14 +399,14 @@ function Recorder() {
             }}
           />
           <button onClick={revert} disabled={!dirty} title="Throw away unsaved changes">Revert</button>
-          <button onClick={download} title="Download templates.json and examples.json, to put in src/gestures/">Download</button>
+          <button onClick={download} title="Download templates.json, holdout.json and examples.json, to put in src/gestures/">Download</button>
           {import.meta.env.DEV && (
-            <button className="primary" onClick={() => void save()} disabled={!dirty} title={`Write src/gestures/templates.json (${kbd('mod+s')})`}>
+            <button className="primary" onClick={() => void save()} disabled={!dirty} title={`Write src/gestures/templates.json and holdout.json (${kbd('mod+s')})`}>
               Save to project
             </button>
           )}
           {import.meta.env.DEV && (
-            <button onClick={() => void restoreBackup()} title="Load templates.backup.json, the samples from before the last save">
+            <button onClick={() => void restoreBackup()} title="Load the templates and test strokes from before the last save">
               Load backup
             </button>
           )}
@@ -353,7 +416,7 @@ function Recorder() {
 
       <nav className="record-labels">
         {labels.map((l) => {
-          const n = counts.get(l) ?? 0;
+          const n = counts.get(l)?.[set] ?? 0;
           return (
             <button
               key={l}
@@ -365,8 +428,8 @@ function Recorder() {
               title={gestureFor(l)?.hint ?? 'Not in gestureConfig.ts: these samples are recognized but do nothing'}
             >
               <span>{l}</span>
-              <span className={`rec-count${n >= TARGET ? ' done' : ''}`}>
-                {n}/{TARGET}
+              <span className={`rec-count${n >= target ? ' done' : ''}`}>
+                {n}/{target}
               </span>
             </button>
           );
@@ -381,17 +444,34 @@ function Recorder() {
       <main className="record-main">
         <div className="rec-prompt">
           <b>{label}</b> <span>{def ? `${describeAction(def.action)} · ${def.hint}` : 'Not in gestureConfig.ts'}</span>
-          <span className={`rec-progress${ofLabel.length >= TARGET ? ' done' : ''}`}>
-            {ofLabel.length} of {TARGET} samples
+          <span className={`rec-progress${ofLabel.length >= target ? ' done' : ''}`}>
+            {ofLabel.length} of {target} {noun}
             {unsavedOfLabel > 0 && <span className="dirty"> · {unsavedOfLabel} not saved yet</span>}
           </span>
+        </div>
+        <div className="rec-set" role="radiogroup" aria-label="Record as">
+          {(['templates', 'test'] as const).map((k) => (
+            <button
+              key={k}
+              role="radio"
+              aria-checked={set === k}
+              className={set === k ? 'on' : ''}
+              onClick={() => {
+                setSet(k);
+                setPending(null);
+              }}
+              title={k === 'test' ? 'Strokes kept out of the templates, used only to measure accuracy (holdout.json)' : 'Samples the recognizer matches against (templates.json)'}
+            >
+              {k === 'test' ? 'Test strokes' : 'Templates'} <span className="rec-set-count">{counts.get(label)?.[k] ?? 0}/{TARGET[k]}</span>
+            </button>
+          ))}
         </div>
         <svg ref={padRef} className="rec-pad" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
           {live && live.length > 1 && <polyline className="rec-stroke" points={live.map((p) => p.join(',')).join(' ')} />}
           {pending && <StrokeMarks points={pending} />}
           {!live && !pending && (
             <text className="rec-placeholder" x="50%" y="50%">
-              Draw a {label} sample
+              Draw a {label} {set === 'test' ? 'test stroke' : 'sample'}
             </text>
           )}
         </svg>
@@ -411,6 +491,11 @@ function Recorder() {
                       </span>
                     ))}
                     {best.score < REJECT_THRESHOLD && <span className="rec-next"> · below reject threshold {REJECT_THRESHOLD}</span>}
+                    {pendingResult !== (best.score >= REJECT_THRESHOLD ? best.label : null) && (
+                      <span className={pendingResult === label ? 'rec-warn' : 'rec-bad'}>
+                        {' '}· after heuristics: {pendingResult ?? 'freehand'}
+                      </span>
+                    )}
                   </>
                 ) : (
                   'No samples to compare against yet'
@@ -424,32 +509,40 @@ function Recorder() {
           )}
           <span className="rec-buttons">
             <button onClick={discard} disabled={!pending} title="Throw this stroke away (Esc)">Discard</button>
-            <button className="primary" onClick={() => accept()} disabled={!pending} title="Keep this stroke as a sample (Enter)">
-              Keep sample
+            <button className="primary" onClick={() => accept()} disabled={!pending} title={`Keep this stroke as a ${set === 'test' ? 'test stroke' : 'template'} (Enter)`}>
+              {set === 'test' ? 'Keep test stroke' : 'Keep sample'}
             </button>
           </span>
         </div>
         <section className="rec-samples">
-          {ofLabel.length === 0 && <span className="rec-next">No {label} samples yet.</span>}
+          {ofLabel.length === 0 && <span className="rec-next">No {label} {noun} yet.</span>}
           {ofLabel.map((s, i) => {
-            const m = loo.get(s.id);
-            const bad = m && (m.label !== s.label || m.score < REJECT_THRESHOLD);
-            const tip = m
-              ? `Against the other samples: ${m.label} ${m.score.toFixed(3)}${bad ? (m.label !== s.label ? ' (wrong class)' : ' (below threshold)') : ''}`
-              : 'Needs another sample of this gesture to compare against';
+            const c = checks.get(s.id);
+            const m = c?.match;
+            const status = statusOf(s);
+            const against = `Against ${s.test ? 'the templates' : 'the other templates'}: recognizer ${m ? `${m.label} ${m.score.toFixed(3)}` : 'no match'}`;
+            const tip = !c
+              ? 'Needs another template of this gesture to compare against'
+              : status === 'ok'
+                ? against
+                : status === 'rescued'
+                  ? `${against}, corrected to ${s.label} by the heuristics`
+                  : `${against}; the app makes it ${c.result ?? 'a freehand stroke'}`;
+            const bad = status === 'bad';
             return (
-              <figure key={s.id} className={`rec-thumb${bad ? ' bad' : ''}${s === shown ? ' shown' : ''}`} title={tip}>
+              <figure key={s.id} className={`rec-thumb${bad ? ' bad' : ''}${status === 'rescued' ? ' rescued' : ''}${s === shown ? ' shown' : ''}`} title={tip}>
                 <svg viewBox="0 0 72 72">
                   <StrokeMarks points={fitInBox(s.points, 72, 10)} scale={0.5} />
                 </svg>
                 <figcaption>
                   {i + 1}
-                  {bad && m && m.label !== s.label && <span className="rec-bad"> → {m.label}</span>}
-                  {s === shown && !(bad && m && m.label !== s.label) && (
+                  {bad && <span className="rec-bad"> → {c?.result ?? 'freehand'}</span>}
+                  {status === 'rescued' && <span className="rec-warn"> fixed</span>}
+                  {s === shown && status === 'ok' && (
                     <span className="rec-example"> · {s.example ? 'example' : 'auto example'}</span>
                   )}
                 </figcaption>
-                <button
+                {!s.test && <button
                   className={`rec-star${s.example ? ' on' : ''}`}
                   onClick={() => toggleExample(s.id)}
                   title={s.example ? 'Stop using as the example (go back to the most typical sample)' : 'Use as the example in the gesture reference'}
@@ -457,7 +550,7 @@ function Recorder() {
                   aria-pressed={!!s.example}
                 >
                   {s.example ? '★' : '☆'}
-                </button>
+                </button>}
                 <button className="rec-del" onClick={() => remove(s.id)} title={`Delete this sample (undo with ${kbd('mod+z')})`} aria-label="Delete sample">
                   ×
                 </button>

@@ -1,18 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { gestureFor } from '../gestures/gestureConfig';
 import holdoutData from '../gestures/holdout.json';
-import { REJECT_THRESHOLD, rank } from '../gestures/recognizer';
-import { parseTemplateFile, sampleTemplates, templates } from '../gestures/templates';
+import { parseTemplateFile, sampleTemplates } from '../gestures/templates';
 import type { Pt } from '../types';
-import { recognize, type Recognized } from './recognize';
-
-const FAMILY: Record<Recognized['type'], string> = {
-  square: 'rectangle',
-  rectangle: 'rectangle',
-  circle: 'circle',
-  ellipse: 'circle',
-  triangle: 'triangle',
-};
+import { gestureOf, isLasso, recognize } from './recognize';
 
 /** A closed polyline through the corners with `per` points on each edge. */
 function loop(corners: Pt[], per = 20): Pt[] {
@@ -39,16 +29,7 @@ describe('recognize, on held-out strokes', () => {
   const holdout = parseTemplateFile(holdoutData).samples;
 
   it.each(holdout.map((s, i) => [s.label, i, s] as const))('%s stroke %i', (label, _i, s) => {
-    const action = gestureFor(label)?.action;
-    if (action?.kind === 'createShape') {
-      const r = recognize(s.points);
-      expect(r && FAMILY[r.type]).toBe(label);
-    } else {
-      // Not wired to the canvas yet: check the recognizer alone.
-      const [best] = rank(s.points, templates);
-      expect(best.label).toBe(label);
-      expect(best.score).toBeGreaterThanOrEqual(REJECT_THRESHOLD);
-    }
+    expect(gestureOf(s.points)).toBe(label);
   });
 });
 
@@ -108,3 +89,33 @@ describe('recognize, with heuristics', () => {
     expect(recognize(rect.map(([x, y]) => [x / 10, y / 10] as Pt), clean)).toBeNull();
   });
 });
+
+describe('lasso', () => {
+  // Counterclockwise on screen: a polar outline r(θ) walked with θ decreasing (y points down).
+  const ccw = (r: (t: number) => number, turns = 1): Pt[] =>
+    Array.from({ length: Math.round(80 * turns) + 1 }, (_, i) => {
+      const t = (-i * 2 * Math.PI) / 80;
+      return [r(t) * Math.cos(t), r(t) * Math.sin(t)] as Pt;
+    });
+  const round = ccw(() => 80);
+  const wobbly = ccw((t) => 80 + 6 * Math.sin(5 * t));
+  const bean = ccw((t) => 80 * (1 - 0.6 * Math.cos(2 * t) ** 2) + 10); // pinched in deeply on two sides
+
+  it('takes closed counterclockwise loops, wobbles included', () => {
+    expect(isLasso(round)).toBe(true);
+    expect(isLasso(wobbly)).toBe(true);
+  });
+
+  it('rejects clockwise, open and bean-shaped loops', () => {
+    expect(isLasso(round.slice().reverse())).toBe(false);
+    expect(isLasso(round.slice(0, 55))).toBe(false); // stops well short of the start
+    expect(isLasso(bean)).toBe(false);
+  });
+
+  it('vetoes a bean even when the recognizer matches it exactly', () => {
+    const templates = sampleTemplates({ label: 'lasso', points: bean });
+    expect(gestureOf(bean, templates)).toBeNull();
+    expect(gestureOf(round, sampleTemplates({ label: 'lasso', points: round }))).toBe('lasso');
+  });
+});
+

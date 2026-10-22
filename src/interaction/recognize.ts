@@ -2,9 +2,11 @@ import { centerPoints, newId, paint, pointsBounds } from '../geometry';
 import { gestureFor } from '../gestures/gestureConfig';
 import {
   closedPart,
+  convexity,
   corners,
   ellipseDeviation,
   fillRatio,
+  isClockwise,
   movingAverage,
   nearlyEqual,
   resampleBySpacing,
@@ -25,6 +27,8 @@ const CLOSE_GAP = 0.2; // how close the stroke must come back to its start, as a
 const OVERSHOOT = 0.08; // how far it may run on past that closest point, as a fraction of the bbox diagonal
 const ELLIPSE_DEVIATION = 0.16; // recorded circles reach 0.135; real rectangles get as low as 0.12
 const MAX_OVAL_TILT = (30 * Math.PI) / 180; // an oval leaning further than this is diagonal, not a sloppy upright one
+const LASSO_GAP = 0.3; // how close a lasso must come back to its start, as a fraction of the bbox diagonal
+const LASSO_CONVEXITY = 0.8; // loop area over convex hull area: slight dents pass, bean shapes don't
 const RIGHT_ANGLE_SLACK = (30 * Math.PI) / 180; // how far a rectangle's corners may be from 90°
 
 /** True once a stroke has come back to its start and then run on too far past it. */
@@ -36,25 +40,55 @@ export function overshot(stroke: Pt[]): boolean {
 
 type Loop = ReturnType<typeof closedPart>;
 
+/** What the app makes of a stroke: the gesture, and for a shape gesture, the shape to create. */
+export interface Interpretation {
+  gesture: string;
+  shape?: Recognized;
+}
+
 /**
- * Turns a stroke into one of the five primitives, or null. The Penny Pincher recognizer proposes
- * gestures, best first; the heuristics below may only veto a proposal or refine it within its family
- * (rectangle → square, circle → ellipse). A vetoed proposal falls back to the next one that scored
- * above the reject threshold, so the recognizer still decides the order. Prefers false negatives:
- * anything ambiguous stays freehand.
+ * The Penny Pincher recognizer proposes gestures, best first; the heuristics below may only veto a
+ * proposal or refine it within its family (rectangle → square, circle → ellipse). A vetoed proposal
+ * falls back to the next one that scored above the reject threshold, so the recognizer still decides
+ * the order. Prefers false negatives: anything ambiguous stays freehand (null).
  */
-export function recognize(stroke: Pt[], templates: readonly Template[] = recorded): Recognized | null {
-  if (stroke.length < 8) return null;
+export function interpret(stroke: Pt[], templates: readonly Template[] = recorded): Interpretation | null {
   let loop: Loop | null | undefined;
   for (const m of rank(stroke, templates)) {
     if (m.score < REJECT_THRESHOLD) break; // the rest score lower still
     const action = gestureFor(m.label)?.action;
-    if (action?.kind !== 'createShape') return null; // a command gesture: not wired up to the canvas yet
-    loop ??= closedLoop(stroke);
-    const r = loop && SHAPES[action.family](loop);
-    if (r) return r;
+    if (action?.kind === 'createShape') {
+      loop ??= closedLoop(stroke);
+      const shape = loop && SHAPES[action.family](loop);
+      if (shape) return { gesture: m.label, shape };
+    } else if (action?.kind === 'lasso') {
+      if (isLasso(stroke)) return { gesture: m.label };
+    } else return { gesture: m.label }; // the other gestures have no heuristics
   }
   return null;
+}
+
+/** The primitive a stroke turns into, or null if it isn't a shape gesture. */
+export function recognize(stroke: Pt[], templates: readonly Template[] = recorded): Recognized | null {
+  return interpret(stroke, templates)?.shape ?? null;
+}
+
+/** The gesture the app acts on for a stroke, or null if it stays freehand. */
+export function gestureOf(stroke: Pt[], templates: readonly Template[] = recorded): string | null {
+  return interpret(stroke, templates)?.gesture ?? null;
+}
+
+/**
+ * A lasso is a closed counterclockwise loop that may wobble or have slight dents, but isn't
+ * bean-shaped: templates can't cover freeform outlines, so deep dents are ruled out by definition.
+ * Running on past the start is fine, since it doesn't change what the loop encloses.
+ */
+export function isLasso(stroke: Pt[]): boolean {
+  const { close, points, diag } = closedPart(stroke);
+  if (points.length < 8 || diag < MIN_DIAG) return false;
+  if (close.gap > diag * LASSO_GAP) return false; // a selection needs no neat outline, but must close
+  if (isClockwise(points)) return false;
+  return convexity(points) >= LASSO_CONVEXITY;
 }
 
 /** The stroke without any overshoot, if it is big enough and closes like a shape should; else null. */

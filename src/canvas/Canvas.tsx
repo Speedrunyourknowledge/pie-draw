@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import simplify from 'simplify-js';
-import { STROKE_WIDTH, dist, groupBounds, keepsAspect, makeFreehand, makePrimitive, makePrimitiveInBox, shapeNearPoint, shapeTouchesRect, worldBounds, type Bounds } from '../geometry';
+import { STROKE_WIDTH, dist, groupBounds, keepsAspect, makeFreehand, makePrimitive, makePrimitiveInBox, shapeInLasso, shapeNearPoint, shapeTouchesRect, worldBounds, type Bounds } from '../geometry';
 import { CUSP_SPAN_PX, SCRIBBLE_HIT_PX, isScribble } from '../gestures/heuristics';
 import { PieMenu } from '../interaction/PieMenu';
 import {
@@ -14,7 +14,7 @@ import {
   type PieSelection,
 } from '../interaction/pieGeometry';
 import { menuFor, type PieItem } from '../interaction/pieMenuConfig';
-import { GhostTracker, overshot, recognize, shapeFromRecognized, type Recognized } from '../interaction/recognize';
+import { GhostTracker, gestureOf, interpret, overshot, recognize, shapeFromRecognized, type Recognized } from '../interaction/recognize';
 import { useStore, type Tool } from '../store';
 import type { PrimitiveType, Pt, Shape, TransformPatch } from '../types';
 import { useKeyboard } from '../useKeyboard';
@@ -184,6 +184,7 @@ export function Canvas() {
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [stroke, setStroke] = useState<Pt[] | null>(null);
   const [ghost, setGhost] = useState<Recognized | null>(null);
+  const [lassoHits, setLassoHits] = useState<Shape[] | null>(null); // while the stroke reads as a lasso: what it would select
   const [draft, setDraft] = useState<Shape | null>(null); // shape being dragged out with the create tool
   const [pulseId, setPulseId] = useState<string | null>(null);
   const [spaceHeld, setSpaceHeld] = useState(false);
@@ -310,6 +311,7 @@ export function Canvas() {
     const st = useStore.getState();
     setStroke(null);
     setGhost(null);
+    setLassoHits(null);
     if (points.length < 2) return;
     // A scribble over shapes erases them. One that touches no shape falls through like any stroke.
     if (st.gesturesOn && isScribble(points, CUSP_SPAN_PX / st.view.zoom)) {
@@ -320,6 +322,18 @@ export function Canvas() {
         st.showToast(`Erased ${hit.length === 1 ? '1 shape' : `${hit.length} shapes`} · ${kbd('mod+z')} to undo`);
         return;
       }
+    }
+    // A lasso selects the shapes whose center is inside it, replacing the selection, even when that's
+    // none. Running on past the start is fine for a lasso, so the overshoot rule below doesn't apply.
+    if (st.gesturesOn && !shown && gestureOf(points) === 'lasso') {
+      const hit = st.shapes.filter((s) => shapeInLasso(s, points)).map((s) => s.id);
+      st.setSelection(hit);
+      st.showToast(
+        hit.length > 0
+          ? `Selected ${hit.length === 1 ? '1 shape' : `${hit.length} shapes`} · drag to move, handles to scale`
+          : 'Lasso: nothing selected',
+      );
+      return;
     }
     // What the ghost showed is what you get, unless the stroke ran on too far past its start.
     // The full stroke only decides when no ghost was up.
@@ -550,7 +564,10 @@ export function Canvas() {
         if (st.gesturesOn) g.check ??= requestAnimationFrame(() => {
           g.check = null;
           if (gesture.current !== g) return; // stroke already finished
-          setGhost(overshot(g.points) ? g.tracker.clear() : g.tracker.update(recognize(g.points)));
+          const it = interpret(g.points);
+          setGhost(overshot(g.points) ? g.tracker.clear() : g.tracker.update(it?.shape ?? null));
+          // A recognized lasso is tinted, with the shapes it would select outlined.
+          setLassoHits(it?.gesture === 'lasso' ? useStore.getState().shapes.filter((s) => shapeInLasso(s, g.points)) : null);
         });
         setStroke(g.points.slice());
         return;
@@ -603,6 +620,7 @@ export function Canvas() {
     setStroke(null);
     setMarquee(null);
     setGhost(null);
+    setLassoHits(null);
     setDraft(null);
     closeMenu();
   };
@@ -756,6 +774,7 @@ export function Canvas() {
           ))}
           {draft && <ShapeView shape={draft} zoom={view.zoom} interactive={false} />}
           {ghost && <GhostPreview result={ghost} color={currentColor} zoom={view.zoom} />}
+          {lassoHits && stroke && <polygon className="lasso-fill" points={stroke.map((q) => q.join(',')).join(' ')} />}
           {stroke && (
             <polyline
               className="live-stroke"
@@ -769,6 +788,7 @@ export function Canvas() {
         {selected.length > 0 && mode !== 'drawing' && (
           <SelectionHandles shapes={selected} view={view} preview={mode === 'selecting'} />
         )}
+        {lassoHits && lassoHits.length > 0 && <SelectionHandles shapes={lassoHits} view={view} preview />}
         {marquee && (() => {
           const [x0, y0] = toScreen([marquee.minX, marquee.minY], view);
           const [x1, y1] = toScreen([marquee.maxX, marquee.maxY], view);
