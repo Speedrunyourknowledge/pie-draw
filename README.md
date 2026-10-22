@@ -69,7 +69,7 @@ Saving and opening files can be done through the **File** menu in the toolbar. D
 
 **Choosing a shape arms a tool instead of dropping a shape.** A shape that appears at a fixed size where the menu was opened almost always has to be moved and scaled afterward. Dragging it out sets position and size in one gesture. The crosshair gives a precise corner to aim with, and the shape icon beside it shows what the next drag will draw, so the mode is visible right where the user is looking. The tool is one-shot and Esc cancels it, so it can't be left on by accident.
 
-**Direction, not distance, selects the menu option.** The slow, label-reading motion  later becomes a quick directional flick from memory.
+**Direction, not distance, selects the menu option.** The slow, label-reading motion later becomes a quick directional flick from memory.
 
 **A visible way out.** Clicking on the center X or beyond the outer menu ring cancels, and both light up to indicate this.
 
@@ -99,7 +99,7 @@ Heuristics can only *reject* what the recognizer proposes or *narrow* it down (e
 
 **Scribble erase is heuristic-only.** A scribble's shape varies too much for templates, so it is detected directly: enough sharp direction reversals, over at least one shape. It runs before the recognizer.
 
-**Generating templates from samples.** Penny Pincher is sensitive to start point, drawing direction and rotation. Rather than recording every variation, each recorded sample generates additional templates, depending on the gesture:
+**Generating templates from samples.** Penny Pincher is sensitive to start point, drawing direction, and rotation. Rather than recording every variation, each recorded sample generates additional templates, depending on the gesture:
 - **Direction-invariant:** each sample is also traced backwards.
 - **Start-invariant:** each sample is also started from 7 other points evenly spaced around it.
 - **Quarter turns:** each sample is turned 90°, 180° and 270°, so it will match any of those orientations. This is not full rotation invariance.
@@ -118,12 +118,12 @@ Each gesture has 10 recorded samples and 5 test strokes (which are held out of t
 
 #### Accuracy by Gesture Category
 
-| Gestures | Test strokes correct (recognizer / with heuristics) |
-|---|---|
-| Shapes | 15 / 15 of 15 |
-| Select and edit (lasso, copy, cut, paste) | 20 / 20 of 20 |
-| Colors 1–5 | 25 / 25 of 25 |
-| Overall | 60 / 60 of 60 |
+| Gestures | Recognizer | With heuristics |
+|---|---|---|
+| Shapes | 15/15 | 15/15 |
+| Select and edit (lasso, copy, cut, paste) | 20/20 | 20/20 |
+| Colors 1–5 | 25/25 | 25/25 |
+| Overall | 60/60 | 60/60 |
 
 Time per stroke: about 0.13 ms for the recognizer and 0.14 ms with heuristics. 
 
@@ -134,7 +134,7 @@ Accuracy is measured by classifying each test stroke once. Timing is measured se
 - **Mobile and touch.** No support for touchscreen pinch-to-zoom or two-finger pan. Additionally, there is no alternate UI for small screens.
 - **Browsers other than desktop Chrome/Edge.** Can save files, but Save downloads a new copy each time instead of overwriting the original.
 - **Pie menu accessibility.** The menu works from the keyboard, but nothing is announced to screen readers.
-- **Rotation.** Shapes cannot be rotated. Additionally, the gesture recognizer is not rotation invariant. Generated templates cover quarter turns of the loop gestures only.
+- **Rotation.** Shapes cannot be rotated. Additionally, the gesture recognizer is not rotation invariant. Generated templates cover quarter turns of the shape and lasso gestures only.
 - **Filling several shapes by gesture.** The fill color gesture can only affect one shape at a time. Dragging inside a selection moves it, so it can't detect a gesture that starts inside it.
 - **Drawing capabilities.** One stroke width, a fixed five-color palette, no command to create straight lines.
 - **Erasing.** There is no pixel-level erasing, by design.
@@ -142,7 +142,7 @@ Accuracy is measured by classifying each test stroke once. Timing is measured se
 
 ## AI Assistance
 
-*To be completed.*
+The code that implements Penny Pincher and connects it to the heuristic pipeline was written with AI assistance so that I could spend more time on designing the gesture set. The design decisions are my own: which gestures trigger which actions, the conditions under which each gesture is accepted, and how the UI works (e.g. pie menu, tools). I also recorded all of the gesture samples myself.
 
 ## References
 
