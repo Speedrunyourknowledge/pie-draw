@@ -7,8 +7,6 @@ import { PointerHint } from './PointerHint';
 
 const EXAMPLES = [
   'Put a red circle here',
-  'Draw three blue squares in a row',
-  'Make this twice as big',
   'Copy the triangle and paste it here',
 ];
 
@@ -72,21 +70,22 @@ export function ChatPanel() {
         <header className="chat-head">
           <SparkleIcon />
           <span className="chat-title">Assistant</span>
-          <span className="chat-model" title={settings.model}>{settings.model}</span>
+          <span className="chat-model" data-tip={settings.model}>{settings.model}</span>
           <ClearButton />
           <button
             className={`chat-icon${showSettings ? ' on' : ''}`}
             onClick={() => setEditing(!editing)}
             disabled={!isConfigured(settings)}
-            title="Model settings"
-            aria-label="Model settings"
+            data-tip="Connect model"
+            aria-label="Connect model"
           >
-            <svg viewBox="0 0 20 20">
-              <circle cx="10" cy="10" r="2.5" />
-              <path d="M10 2.5 V4.5 M10 15.5 V17.5 M2.5 10 H4.5 M15.5 10 H17.5 M4.7 4.7 L6.1 6.1 M13.9 13.9 L15.3 15.3 M4.7 15.3 L6.1 13.9 M13.9 6.1 L15.3 4.7" />
+            {/* lucide: key-round */}
+            <svg viewBox="0 0 24 24" strokeWidth={2} strokeLinejoin="round">
+              <path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z" />
+              <circle cx="16.5" cy="7.5" r=".5" fill="currentColor" />
             </svg>
           </button>
-          <button className="chat-icon" onClick={close} title="Close (Esc in the message box)" aria-label="Close assistant">
+          <button className="chat-icon" onClick={close} data-tip="Close (Esc in the message box)" aria-label="Close assistant">
             <svg viewBox="0 0 20 20"><path d="M5 5 L15 15 M15 5 L5 15" /></svg>
           </button>
         </header>
@@ -101,8 +100,38 @@ export function ChatPanel() {
 function ClearButton() {
   const empty = useChat((s) => s.log.length === 0);
   return (
-    <button className="chat-icon" onClick={() => useChat.getState().clear()} disabled={empty} title="Clear the conversation" aria-label="Clear the conversation">
+    <button className="chat-icon" onClick={() => useChat.getState().clear()} disabled={empty} data-tip="Clear the conversation" aria-label="Clear the conversation">
       <svg viewBox="0 0 20 20"><path d="M4 6 H16 M8 6 V4 H12 V6 M6 6 L7 17 H13 L14 6" /></svg>
+    </button>
+  );
+}
+
+/** Shown under a message on hover, in the gap before the next one. */
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(false), 1200);
+    return () => clearTimeout(t);
+  }, [copied]);
+
+  return (
+    <button
+      className={`chat-copy${copied ? ' copied' : ''}`}
+      onClick={() => navigator.clipboard.writeText(text).then(() => setCopied(true), () => {})}
+      data-tip="Copy"
+      aria-label={copied ? 'Copied' : 'Copy message'}
+    >
+      {copied ? (
+        // lucide: check
+        <svg viewBox="0 0 24 24" strokeWidth={2}><path d="M20 6 9 17l-5-5" /></svg>
+      ) : (
+        // lucide: copy, with the back square's lines run up to the front one
+        <svg viewBox="0 0 24 24" strokeWidth={2}>
+          <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+          <path d="M8 16H4c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2v4" />
+        </svg>
+      )}
     </button>
   );
 }
@@ -140,7 +169,8 @@ function Conversation({ onLeave }: { onLeave: () => void }) {
       <div className="chat-log" ref={listRef}>
         {log.length === 0 && (
           <div className="chat-empty">
-            <p>Ask for shapes and edits in plain words. <b>Point with the mouse</b> on the canvas to say where “here” is, or which shape “this” is.</p>
+            <p>After typing, <b>point with the mouse</b> to indicate “here” or “this”, then press <b>Enter</b>.</p>
+            <p>Here are some examples to get you started:</p>
             <div className="chat-examples">
               {EXAMPLES.map((ex) => (
                 <button
@@ -154,7 +184,6 @@ function Conversation({ onLeave }: { onLeave: () => void }) {
                 </button>
               ))}
             </div>
-            <p className="chat-tip">Pick one, point at the canvas, then press <b>Enter</b>.</p>
           </div>
         )}
         {log.map((item) => (
@@ -163,6 +192,7 @@ function Conversation({ onLeave }: { onLeave: () => void }) {
               <svg viewBox="0 0 20 20" aria-hidden><path d="M5 10.5 L8.5 14 L15 6.5" /></svg>
             )}
             <span>{item.text}</span>
+            {(item.kind === 'user' || item.kind === 'assistant') && <CopyButton text={item.text} />}
           </div>
         ))}
         {busy && <div className="chat-msg thinking" aria-label="Working"><i /><i /><i /></div>}
@@ -194,11 +224,11 @@ function Conversation({ onLeave }: { onLeave: () => void }) {
           }}
         />
         {busy ? (
-          <button type="button" className="chat-send stop" onClick={() => useChat.getState().stop()} title="Stop" aria-label="Stop">
+          <button type="button" className="chat-send stop" onClick={() => useChat.getState().stop()} data-tip="Stop" data-tip-side="right" aria-label="Stop">
             <svg viewBox="0 0 20 20"><rect x="6" y="6" width="8" height="8" rx="1.5" /></svg>
           </button>
         ) : (
-          <button type="submit" className="chat-send" disabled={!text.trim()} title="Send (Enter)" aria-label="Send">
+          <button type="submit" className="chat-send" disabled={!text.trim()} data-tip="Send (Enter)" data-tip-side="right" aria-label="Send">
             <svg viewBox="0 0 20 20"><path d="M10 16 V4 M5 9 L10 4 L15 9" /></svg>
           </button>
         )}
@@ -209,7 +239,7 @@ function Conversation({ onLeave }: { onLeave: () => void }) {
 
 const PROVIDERS: { id: Provider; label: string }[] = [
   { id: 'anthropic', label: 'Claude' },
-  { id: 'openai', label: 'OpenAI-compatible' },
+  { id: 'openai', label: 'OpenAI-Compatible' },
 ];
 
 function Settings({ onDone }: { onDone: () => void }) {
@@ -233,7 +263,7 @@ function Settings({ onDone }: { onDone: () => void }) {
         onDone();
       }}
     >
-      <p>Connect a model to chat with. Settings stay in this browser.</p>
+      <p>Connect a model to chat with.</p>
       <div className="chat-seg" role="radiogroup" aria-label="Provider">
         {PROVIDERS.map((p) => (
           <button type="button" key={p.id} role="radio" aria-checked={draft.provider === p.id} className={draft.provider === p.id ? 'on' : ''} onClick={() => pickProvider(p.id)}>
@@ -247,21 +277,18 @@ function Settings({ onDone }: { onDone: () => void }) {
           type="password"
           value={draft.apiKey}
           onChange={(e) => set({ apiKey: e.target.value })}
-          placeholder={usesProxy({ ...draft, apiKey: '' }) ? 'Using AI_API_KEY from .env.local' : draft.provider === 'anthropic' ? 'sk-ant-…' : 'Leave empty for local servers'}
+          placeholder={usesProxy({ ...draft, apiKey: '' }) ? 'Using AI_API_KEY from .env.local' : ''}
           autoComplete="off"
         />
       </label>
       <label>
         Model
-        <input value={draft.model} onChange={(e) => set({ model: e.target.value })} placeholder={DEFAULT_MODEL[draft.provider] || 'Model name'} required />
+        <input value={draft.model} onChange={(e) => set({ model: e.target.value })} placeholder={DEFAULT_MODEL[draft.provider] || 'e.g. gpt-6-luna, deepseek-flash'} required />
       </label>
       <label>
         <span>Server URL <span className="optional">(optional)</span></span>
         <input value={draft.baseUrl} onChange={(e) => set({ baseUrl: e.target.value })} placeholder={DEFAULT_URL[draft.provider]} />
       </label>
-      {draft.provider === 'openai' && (
-        <p className="hint">Leave empty for OpenAI. For another service, use the URL from its docs, e.g. <code>https://openrouter.ai/api/v1</code>, or <code>http://localhost:11434/v1</code> for Ollama. The model must support tool calling.</p>
-      )}
       <button type="submit" className="chat-save" disabled={!isConfigured({ ...draft, apiKey: draft.apiKey.trim(), model: draft.model.trim() })}>
         Save
       </button>

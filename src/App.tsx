@@ -6,6 +6,7 @@ import { ColorPicker } from './ui/ColorPicker';
 import { GestureGuide } from './ui/GestureGuide';
 import { HelpPanel } from './ui/HelpPanel';
 import { Toast } from './ui/Toast';
+import { Tooltip } from './ui/Tooltip';
 import { TopBar } from './ui/TopBar';
 import { NavControls } from './ui/NavControls';
 import { RecordMode } from './ui/RecordMode';
@@ -37,6 +38,7 @@ export default function App() {
       <GestureGuide />
       <Toast />
       <RecordMode />
+      <Tooltip />
     </div>
   );
 }

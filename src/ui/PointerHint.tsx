@@ -17,6 +17,11 @@ function cursorImageAt(x: number, y: number): string | null {
   return url.replace(/%231f2933/gi, encodeURIComponent(gray)); // the cursors' ink, --black
 }
 
+/** Whether a cursor image is the pen's, found by the path its tip starts at (see .canvas in index.css). */
+function isPen(url: string): boolean {
+  return url.includes('M3.2 20.8') || url.includes('M3.2%2020.8');
+}
+
 /**
  * Marks where the pointer is until the mouse moves. The system hides the pointer while typing and
  * only shows it again on a mouse move, so after leaving the message box with a key this keeps it
@@ -25,10 +30,13 @@ function cursorImageAt(x: number, y: number): string | null {
  */
 export function PointerHint({ at, onDone }: { at: { x: number; y: number }; onDone: () => void }) {
   const hand = useStore((s) => s.tool === 'hand');
+  // Any change to the drawing's state (Esc again dropping back to the pen, say) can change the
+  // cursor, so read it again on each one. The marker lasts only until the mouse moves.
+  const state = useStore();
   const [image, setImage] = useState<string | null>(null);
 
-  // After the commit, so the canvas has already dropped its aiming cursor.
-  useLayoutEffect(() => setImage(cursorImageAt(at.x, at.y)), [at]);
+  // After the commit, so the canvas has already dropped its aiming cursor or taken the new tool's.
+  useLayoutEffect(() => setImage(cursorImageAt(at.x, at.y)), [at, state]);
 
   useEffect(() => {
     // Browsers can send a move without one after the page changes, so only a real move counts.
@@ -53,7 +61,7 @@ export function PointerHint({ at, onDone }: { at: { x: number; y: number }; onDo
         <circle r="6" />
       </svg>
       {image ? (
-        <img className="pointer-hint-tool" src={image} alt="" />
+        <img className={`pointer-hint-tool${isPen(image) ? ' pen' : ''}`} src={image} alt="" />
       ) : (
         hand && (
           <svg className="pointer-hint-tool" viewBox="0 0 20 20">

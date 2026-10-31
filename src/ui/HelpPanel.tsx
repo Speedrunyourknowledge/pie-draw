@@ -68,11 +68,11 @@ export function HelpPanel() {
             <li><b>Cancel</b> by selecting the red X in the center, or by moving past the menu's edge. Esc works too.</li>
             <li>The <b>File</b> menu at the top allows you to save and open your drawings.</li>
             <li>
-              <b>Assistant:</b> click <b>Assistant</b> in the top bar (or press <Key>/</Key>) and type requests like “put a red circle here” or “delete the blue shapes”.
-              While typing, <b>point with the mouse</b>: “here” is the pointer, and “this” is the shape under it.
+              <b>Assistant:</b> Click <b>Assistant</b> in the top bar (or press <Key>/</Key>) to interact with an AI assistant.
+              After typing, <b>point with the mouse</b> to indicate “here” or “this”, then press <b>Enter</b>.
             </li>
             <li>
-              <b>Gestures:</b> with Gestures on (top bar, or <Key>G</Key>), single strokes create shapes, select, copy, paste, set colors and delete.{' '}
+              <b>Gestures:</b> With Gestures on (top bar, or <Key>G</Key>), single strokes create shapes, select, copy, paste, set colors and delete.{' '}
               <button className="help-link" onClick={() => useStore.getState().setGestureGuideOpen(true)}>See all gestures →</button>
             </li>
           </ul>
@@ -101,7 +101,7 @@ export function HelpPanel() {
             </ul>
             <h3>Move Around</h3>
             <ul className="help-list">
-              <li><b>Hold the scroll wheel (middle button) and drag</b> to pan the canvas.</li>
+              <li><b>Hold the scroll wheel and drag</b> to pan the canvas.</li>
               <li>No scroll wheel? Use the <b>hand tool</b> (lower right, or <Key>H</Key>), or hold <Key>Space</Key> and drag.</li>
               <li><b>Scroll</b> or two-finger swipe also pans.</li>
               <li><b>Pinch</b> or <Key>Ctrl+scroll</Key> zooms (when nothing is selected). Zoom buttons are in the lower right.</li>

@@ -145,7 +145,8 @@ export function ColorPicker({ kind }: { kind: Kind }) {
               key={c.name}
               className={`fan-swatch ${kind} ${c.value ? '' : 'none'} ${c.value === shown && !mixed ? 'active' : ''}`}
               style={{ '--swatch': c.value ?? '#fff', '--x': `${x}px`, '--y': `${y}px` } as React.CSSProperties}
-              title={`${label}: ${c.name} (${key})`}
+              data-tip-side="left"
+              data-tip={`${label}: ${c.name} (${key})`}
               aria-label={`${label}: ${c.name}`}
               {...handlers(c.value, () => {
                 apply(c.value);
@@ -160,7 +161,8 @@ export function ColorPicker({ kind }: { kind: Kind }) {
         className={`color-current ${kind} ${shown ? '' : 'none'} ${open ? 'open' : ''}`}
         style={{ '--swatch': shown ?? '#fff' } as React.CSSProperties}
         disabled={disabled}
-        title={
+        data-tip-side="left"
+        data-tip={
           disabled
             ? 'Lines have no fill'
             : `${selected.length > 1 ? 'Selection' : selected.length ? 'Shape' : 'New shape'} ${label.toLowerCase()}: ${shownName}. Click to change, or drag onto a shape`

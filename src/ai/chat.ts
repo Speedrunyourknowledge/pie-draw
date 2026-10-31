@@ -96,6 +96,7 @@ export const useChat = create<ChatState>()((set, get) => {
       const { settings, busy } = get();
       if (busy || !text.trim()) return;
       log('user', text.trim());
+      const logStart = get().log.length;
       // The pointer and canvas are captured when the message is sent, which is when the user is pointing.
       pushTurn({ role: 'user', content: `${text.trim()}\n\n<canvas>${canvasState(pointing())}</canvas>` });
       // Through the dev server, the key sent is a placeholder that it swaps for the real one.
@@ -112,7 +113,11 @@ export const useChat = create<ChatState>()((set, get) => {
           if (res.text) log('assistant', res.text);
           if (res.stop === 'refused') log('error', 'The model declined this request.');
           if (res.stop === 'truncated') log('error', 'The reply was cut off.');
-          if (res.stop !== 'tools') return;
+          if (res.stop !== 'tools') {
+            // Ending a turn after tool use without words is fine; ending with nothing shown at all is not.
+            if (get().log.length === logStart) log('error', 'The model didn’t respond.');
+            return;
+          }
           // Run in order: later calls often depend on the selection earlier ones made.
           usedTools = true;
           const results = res.calls.map((c) => {

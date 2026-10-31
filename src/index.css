@@ -706,11 +706,7 @@ svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo {
 .record .rec-del:hover { background: #fbdcdc; color: #c62a2f; }
 
 /* ---- gesture mode switch (top bar) ---- */
-.topbar-actions .gesture-toggle { color: var(--muted); }
-.topbar-actions .gesture-toggle.on { color: var(--black); }
-.gesture-toggle .sparkle { opacity: 0; transition: opacity 120ms; }
-.gesture-toggle.on .sparkle { opacity: 1; stroke: var(--accent); }
-.gesture-toggle.on svg path:first-child { stroke: var(--accent); }
+/* Only the switch track shows the state; the icon and label look the same either way. */
 .switch {
   position: relative;
   width: 26px;
@@ -746,7 +742,7 @@ svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo {
   align-items: center;
   gap: 6px;
   width: fit-content;
-  margin: 8px 0 0;
+  margin: 12px 0 0;
   padding: 7px 14px;
   border: 1px solid rgba(62, 99, 221, 0.3);
   border-radius: 8px;
@@ -821,8 +817,9 @@ svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo {
 .record .rec-star:hover { background: #fdf3df; color: #f5a524; }
 
 /* ---- assistant chat ---- */
-.topbar-actions button.on { background: #e8edfc; color: var(--accent); }
-.topbar-actions button.on:hover { background: #dde4fb; }
+/* The open Assistant button is tinted; the gesture switch shows its state with the track alone. */
+.topbar-actions button.on:not(.gesture-toggle) { background: #e8edfc; color: var(--accent); }
+.topbar-actions button.on:not(.gesture-toggle):hover { background: #dde4fb; }
 .menu-open .chat { opacity: 0.35; }
 .chat {
   position: fixed;
@@ -885,7 +882,8 @@ svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo {
 }
 .chat-icon:hover:not(:disabled) { background: rgba(31, 41, 51, 0.07); color: var(--black); }
 .chat-icon:disabled { opacity: 0.35; cursor: default; }
-.chat-icon.on { color: var(--accent); }
+.chat-icon.on,
+.chat-icon.on:hover:not(:disabled) { background: rgba(62, 99, 221, 0.12); color: var(--accent); }
 
 .chat-log {
   flex: 1;
@@ -910,12 +908,52 @@ svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo {
 .chat-examples button:hover { border-color: var(--accent); color: var(--accent); }
 .chat-empty .chat-tip { margin: 10px 0 0; font-size: 13px; }
 
-.chat-msg { line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-msg { position: relative; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-copy {
+  position: absolute;
+  top: 100%;
+  z-index: 1;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+}
+/* User and assistant messages reserve a row below for the copy button, and that whole
+   row (plus the flex gap) counts as hovering the message. */
+.chat-msg.user,
+.chat-msg.assistant { margin-bottom: 16px; }
+.chat-msg.user::after,
+.chat-msg.assistant::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: 24px; /* margin-bottom + the log's 8px gap */
+}
+.chat-msg.user:has(+ .chat-msg:not(.user))::after { height: 28px; } /* plus the 4px margin-top below */
+.chat-msg.user .chat-copy { top: calc(100% + 2px); right: 0; }
+.chat-msg.assistant .chat-copy { top: 100%; left: -4px; } /* line-height already adds a little air */
+.chat-msg:hover .chat-copy,
+.chat-copy:focus-visible,
+.chat-copy.copied { opacity: 1; pointer-events: auto; }
+.chat-copy:hover { background: rgba(31, 41, 51, 0.07); color: var(--black); }
+.chat-copy.copied { color: #30a46c; }
+.chat .chat-copy svg { width: 15px; height: 15px; }
 .chat-msg.user {
   align-self: flex-end;
   max-width: 85%;
   padding: 7px 12px;
-  border-radius: 14px 14px 4px 14px;
+  border-radius: 11px;
   background: var(--accent);
   color: #fff;
 }
@@ -1069,11 +1107,30 @@ svg.canvas.aiming .shape .halo { display: none !important; }
 }
 /* Beside the ring, lower right, like the shape tool's cursor shows its shape. */
 .pointer-hint-tool {
-  width: 20px;
-  height: 20px;
+  width: 25px;
+  height: 25px;
   left: 3px;
   top: 3px;
-  stroke-width: 1.5;
+  stroke-width: 1.2; /* 1.5px on screen, since the 20-unit drawing is shown at 25px */
 }
-/* The cursor's own image keeps its size, as on the canvas. */
-img.pointer-hint-tool { position: absolute; width: auto; height: auto; }
+/* The cursor's own image, a quarter larger than on the canvas so it reads at a glance. */
+img.pointer-hint-tool { position: absolute; width: auto; height: auto; transform: scale(1.25); transform-origin: 0 0; }
+/* The pen's drawing leaves more blank space than the others, so it sits a little up and right of them to look the same distance away. */
+img.pointer-hint-tool.pen { left: 3px; top: 1px; }
+
+/* ---- tooltip (shared; see Tooltip.tsx) ---- */
+.tooltip {
+  position: fixed;
+  z-index: 30;
+  padding: 5px 9px;
+  border-radius: 6px;
+  background: var(--black);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.3;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(31, 41, 51, 0.18);
+  animation: tooltip-in 90ms ease-out;
+}
+@keyframes tooltip-in { from { opacity: 0; } }
