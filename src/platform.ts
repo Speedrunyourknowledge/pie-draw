@@ -7,6 +7,11 @@ const platform =
 
 export const isMac = /mac|iphone|ipad/i.test(platform);
 
+/** Whether keys aimed at this element are typing (a text box), not shortcuts. */
+export function isTextField(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
+}
+
 /** True when a shortcut modifier is held: ⌘ or Ctrl on a Mac, Ctrl elsewhere. */
 export function isMod(e: { metaKey: boolean; ctrlKey: boolean }): boolean {
   return e.ctrlKey || (isMac && e.metaKey);

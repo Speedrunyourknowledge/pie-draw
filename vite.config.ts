@@ -73,11 +73,39 @@ function gestureTemplates(): Plugin {
   }
 }
 
+/**
+ * Dev only: forwards /__ai to the model API and adds the key from AI_API_KEY (no VITE_ prefix, so it
+ * never reaches the browser or a build). The upstream is VITE_AI_SERVER_URL, or the provider's usual API.
+ */
+function aiProxy(env: Record<string, string>) {
+  const target = env.VITE_AI_SERVER_URL || (env.VITE_AI_PROVIDER === 'openai' ? 'https://api.openai.com/v1' : 'https://api.anthropic.com')
+  return {
+    '/__ai': {
+      target,
+      changeOrigin: true,
+      rewrite: (path: string) => path.replace(/^\/__ai/, ''),
+      configure: (proxy: { on: (event: 'proxyReq', fn: (req: import('node:http').ClientRequest) => void) => void }) =>
+        proxy.on('proxyReq', (req) => {
+          // Replace the placeholder the app sends with the real key. Both APIs accept a bearer key.
+          req.removeHeader('x-api-key')
+          req.setHeader('authorization', `Bearer ${env.AI_API_KEY}`)
+        }),
+    },
+  }
+}
+
 // https://vite.dev/config/
-export default defineConfig(({ mode }) => ({
-  plugins: [react(), gestureTemplates()],
-  define: {
-    // Hidden gesture record mode, opened with RECORD_MODE=true (from the shell or a .env file).
-    'import.meta.env.RECORD_MODE': JSON.stringify(loadEnv(mode, process.cwd(), '').RECORD_MODE === 'true'),
-  },
-}))
+export default defineConfig(({ mode, command }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  const proxyAi = command === 'serve' && !!env.AI_API_KEY
+  return {
+    plugins: [react(), gestureTemplates()],
+    define: {
+      // Hidden gesture record mode, opened with RECORD_MODE=true (from the shell or a .env file).
+      'import.meta.env.RECORD_MODE': JSON.stringify(env.RECORD_MODE === 'true'),
+      // Whether the dev server holds an AI key (only the flag; the key itself stays on the server).
+      'import.meta.env.AI_PROXY': JSON.stringify(proxyAi),
+    },
+    server: proxyAi ? { proxy: aiProxy(env) } : undefined,
+  }
+})

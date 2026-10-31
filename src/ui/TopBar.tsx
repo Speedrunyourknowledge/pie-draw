@@ -1,5 +1,7 @@
+import { useChat } from '../ai/chat';
 import { kbd } from '../platform';
 import { useStore } from '../store';
+import { SparkleIcon } from './ChatPanel';
 import { FileMenu } from './FileMenu';
 
 /** App identity, the File menu, and a few always-useful commands. Creation and editing stay in the pie menu. */
@@ -11,6 +13,7 @@ export function TopBar() {
   const empty = useStore((s) => s.shapes.length === 0);
   const canPaste = useStore((s) => s.clipboard !== null);
   const gesturesOn = useStore((s) => s.gesturesOn);
+  const chatOpen = useChat((s) => s.open);
   const st = useStore.getState;
 
   return (
@@ -75,6 +78,15 @@ export function TopBar() {
         <button disabled={empty} onClick={() => st().clearAll()} title="Remove every shape (undoable)">
           <svg viewBox="0 0 20 20"><path d="M4 6 H16 M8 6 V4 H12 V6 M6 6 L7 17 H13 L14 6" /></svg>
           <span>Clear all</span>
+        </button>
+        <button
+          className={chatOpen ? 'on' : ''}
+          aria-pressed={chatOpen}
+          onClick={() => useChat.getState().setOpen(!chatOpen, !chatOpen)}
+          title="Assistant: ask for shapes and edits in plain words (/)"
+        >
+          <SparkleIcon />
+          <span>Assistant</span>
         </button>
         <button className="help-btn" onClick={() => st().setHelpOpen(true)} title="Help (?)">
           <svg viewBox="0 0 20 20">

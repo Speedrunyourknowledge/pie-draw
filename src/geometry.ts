@@ -1,4 +1,4 @@
-import type { PrimitiveType, Pt, Shape, ShapeType } from './types';
+import type { PrimitiveType, Pt, Shape, ShapeType, TransformPatch } from './types';
 
 export interface Bounds {
   minX: number;
@@ -268,6 +268,16 @@ export function smoothPath(points: Pt[]): string {
 
 export function dist(a: Pt, b: Pt): number {
   return Math.hypot(a[0] - b[0], a[1] - b[1]);
+}
+
+/** Scales every shape by (kx, ky) about the canvas point (ax, ay). */
+export function scaleAbout(shapes: Shape[], ax: number, ay: number, kx: number, ky: number) {
+  return new Map<string, TransformPatch>(
+    shapes.map((s) => [
+      s.id,
+      { x: ax + (s.x - ax) * kx, y: ay + (s.y - ay) * ky, scaleX: s.scaleX * kx, scaleY: s.scaleY * ky },
+    ]),
+  );
 }
 
 /** Squares and circles always scale uniformly so they keep their identity. */

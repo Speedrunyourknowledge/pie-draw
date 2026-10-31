@@ -43,6 +43,26 @@ With gestures enabled, single strokes drawn on the canvas act as commands.
 
 - **Record mode** (`RECORD_MODE=true npm run dev`) opens a page for recording gesture samples.
 
+### AI Assistant
+
+Click **Assistant** in the top bar (or press **/**) to open a chat panel and ask for changes in plain words: "put a green square here", "make the two circles bigger", "copy the triangle and paste it next to the square", "delete everything red".
+
+- **Point while you type.** "Here" is where the mouse is on the canvas when you send the message, and "this" is the shape under it. A small marker shows that spot while you type.
+- **Every action is one the app already has.** The assistant works through the same actions as the menu, gestures and keyboard: create shapes, select, move, scale, cut / copy / paste, delete, recolor, z-order, undo / redo, clear, and zoom. Each change is a normal undo step, so **Undo** reverts it like any other edit.
+- **Beyond the required commands:** recoloring line and fill, bringing shapes to front / sending them to back, undoing or redoing several steps ("undo that"), and adjusting the view ("show me everything").
+- **One conversation.** The trash button clears it; the stop button cancels a request in progress.
+
+#### Connecting a Model
+
+The first time the panel opens, it asks for a provider, API key and model. The settings are stored in this browser only.
+
+- **Claude**: an [Anthropic API key](https://console.anthropic.com/) and a model, `claude-opus-5-5` by default.
+- **OpenAI-compatible**: OpenAI, or any service that offers the same API (OpenRouter, Groq, or local servers such as Ollama and LM Studio). Enter the service's **Server URL**, e.g. `https://openrouter.ai/api/v1` or `http://localhost:11434/v1` for Ollama. The model must support tool calling.
+
+The Server URL is optional for Claude and OpenAI. When left empty, the app uses their usual addresses.
+
+To skip the form, copy `.env.example` to `.env.local`, fill it in, and restart `npm run dev`. The key goes in `AI_API_KEY`. It has no `VITE_` prefix, so it stays on the dev server and never reaches the browser or a build. The dev server forwards the assistant's requests and adds the key. A production build has no server, so there the key must be entered in the panel.
+
 ### Drawing and Editing
 
 - **Create shapes** from the empty-canvas menu. Choosing a shape turns the pointer into a crosshair with a small icon of that shape. Drag to draw it at any size, or click to place it at a default size. The pointer then returns to the pen.
@@ -86,6 +106,16 @@ Saving and opening files can be done through the **File** menu in the toolbar. D
 **Ghost preview for shape recognition.** When drawing freehand, a recognized shape appears as a ghost *behind* the drawing, at the exact size it will snap to. It changes only after multiple consecutive frames agree.
 
 **Feedback and discoverability.** A status line at the bottom always says what the user can currently do, in every state and tool. When the canvas is blank, the user is instructed how to open the pie menu and how to access the help panel.
+
+**The assistant uses tools, not a separate feature set.** The model gets a list of tools (`src/ai/tools.ts`), each a thin wrapper around an existing store action, and the app runs whatever calls it asks for. This keeps the assistant's abilities exactly the app's abilities. It also makes its work visible in the usual way: the shapes it edits get selected, and its changes show up in undo history.
+
+**Select, then act.** Editing tools act on the selection, as they do for a user, instead of taking shape ids. A request like "make the red one bigger" first selects the red shape and then scales it, so the user sees which shape was picked before and after the change.
+
+**Pointing instead of coordinates.** Nobody wants to type coordinates, so the mouse supplies the location. Each message is sent with the pointer's position, the shape under it, the visible area, the selection, and a summary of every shape. That gives the model what it needs to resolve "here", "this", "the one on the left", or "the biggest circle".
+
+**Keeping the pointer visible on the canvas.** Normally, when you press Esc while typing in a text box, the operating system hides the pointer until the mouse moves again. This rarely matters while browsing, but on a drawing canvas, losing the pointer is disorienting. Here is how this app handles it: when Esc is pressed in the chat panel (and the pointer is on the canvas), a marker is shown at the pointer's position with the current tool indicated. This allows the user to resume drawing immediately.
+
+**Any model.** The conversation is stored in a provider-neutral form, and a small adapter talks to Claude (through the Anthropic SDK) or to any OpenAI-compatible API (`src/ai/providers.ts`). The model runs in a loop: it requests tool calls, the app runs them in order and returns the results, and this repeats until the model replies with plain text.
 
 ### Gesture Design
 

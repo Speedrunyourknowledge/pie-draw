@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { newDoc, openDoc, saveDoc } from './file/fileOps';
-import { isMod } from './platform';
+import { useChat } from './ai/chat';
+import { isMod, isTextField } from './platform';
 import { useStore } from './store';
 import { PALETTE } from './types';
 import { fitToContent, resetZoom, selectAdjacent, zoomIn, zoomOut } from './view';
@@ -17,6 +18,7 @@ export function useKeyboard(onEscape: () => void, onMenuKey: (e: KeyboardEvent) 
       let handled = true;
 
       if (st.recordOpen) return; // record mode handles its own keys
+      if (isTextField(e.target)) return; // typing in the chat or settings
 
       if (st.helpOpen) {
         // The help panel only listens for ways to close it.
@@ -57,6 +59,7 @@ export function useKeyboard(onEscape: () => void, onMenuKey: (e: KeyboardEvent) 
       else if (key === 'delete' || key === 'backspace') st.deleteSelected();
       else if (key === 'escape') onEscape();
       else if (key === '?' || (key === '/' && e.shiftKey)) st.setHelpOpen(true);
+      else if (key === '/') useChat.getState().setOpen(true, true);
       else if (key === '=' || key === '+') zoomIn();
       else if (key === '-' || key === '_') zoomOut();
       else if (key === '0') resetZoom();

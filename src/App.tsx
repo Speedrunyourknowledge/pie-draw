@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { Canvas } from './canvas/Canvas';
+import { ChatPanel } from './ui/ChatPanel';
 import { useStore } from './store';
 import { ColorPicker } from './ui/ColorPicker';
 import { GestureGuide } from './ui/GestureGuide';
@@ -31,6 +32,7 @@ export default function App() {
         </div>
         <NavControls />
       </div>
+      <ChatPanel />
       <HelpPanel />
       <GestureGuide />
       <Toast />

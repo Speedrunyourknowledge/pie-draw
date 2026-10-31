@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import simplify from 'simplify-js';
-import { STROKE_WIDTH, canFill, dist, groupBounds, keepsAspect, makeFreehand, makePrimitive, makePrimitiveInBox, pointsBounds, shapeInLasso, shapeNearPoint, shapeTouchesRect, worldBounds, type Bounds } from '../geometry';
+import { STROKE_WIDTH, canFill, dist, groupBounds, keepsAspect, makeFreehand, makePrimitive, makePrimitiveInBox, pointsBounds, scaleAbout, shapeInLasso, shapeNearPoint, shapeTouchesRect, worldBounds, type Bounds } from '../geometry';
 import { describeAction, gestureFor, type GestureAction } from '../gestures/gestureConfig';
 import { CUSP_SPAN_PX, SCRIBBLE_HIT_PX, isScribble } from '../gestures/heuristics';
 import { PieMenu } from '../interaction/PieMenu';
@@ -16,10 +16,11 @@ import {
 } from '../interaction/pieGeometry';
 import { menuFor, type PieItem } from '../interaction/pieMenuConfig';
 import { GhostTracker, interpret, overshot, shapeFromRecognized, type Recognized } from '../interaction/recognize';
+import { useChat } from '../ai/chat';
 import { useStore, type Tool } from '../store';
-import type { PrimitiveType, Pt, Shape, TransformPatch } from '../types';
+import type { PrimitiveType, Pt, Shape } from '../types';
 import { useKeyboard } from '../useKeyboard';
-import { isMac, kbd } from '../platform';
+import { isMac, isTextField, kbd } from '../platform';
 import { toScreen, toWorld } from '../view';
 import { GhostPreview } from './GhostPreview';
 import { SELECTION_PAD, SelectionHandles, type Corner } from './SelectionHandles';
@@ -86,16 +87,6 @@ function shapeIdBelow(x: number, y: number): string | null {
 const isGroupArea = (target: EventTarget | null) => !!(target as Element | null)?.hasAttribute?.('data-group');
 function hitHandle(target: EventTarget | null): Corner | null {
   return ((target as Element | null)?.getAttribute?.('data-handle') as Corner | null) ?? null;
-}
-
-/** Scales every shape by (kx, ky) about the canvas point (ax, ay). */
-function scaleAbout(shapes: Shape[], ax: number, ay: number, kx: number, ky: number) {
-  return new Map<string, TransformPatch>(
-    shapes.map((s) => [
-      s.id,
-      { x: ax + (s.x - ax) * kx, y: ay + (s.y - ay) * ky, scaleX: s.scaleX * kx, scaleY: s.scaleY * ky },
-    ]),
-  );
 }
 
 /**
@@ -175,6 +166,7 @@ export function Canvas() {
   const view = useStore((s) => s.view);
   const dropTargetId = useStore((s) => s.dropTargetId);
   const tool = useStore((s) => s.tool);
+  const aiming = useChat((s) => s.inputFocused); // typing to the assistant: the pointer only marks "here"
   const createType = useStore((s) => s.createType);
   const gesturesOn = useStore((s) => s.gesturesOn);
 
@@ -798,7 +790,7 @@ export function Canvas() {
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.key === 'Shift') setShiftHeld(true);
-      if (e.code === 'Space' && !e.repeat) {
+      if (e.code === 'Space' && !e.repeat && !isTextField(e.target)) {
         spaceRef.current = true;
         setSpaceHeld(true);
         e.preventDefault();
@@ -827,7 +819,7 @@ export function Canvas() {
     <>
       <svg
         ref={svgRef}
-        className={`canvas mode-${mode} ${spaceHeld || panning ? 'panning' : tool !== 'draw' ? tool : ''}${shiftHeld && (tool === 'draw' || tool === 'select') ? ' shift-select' : ''}${gesturesOn && tool === 'draw' ? ' gestures' : ''}${menu && overMenu(menu) ? ' over-menu' : ''}`}
+        className={`canvas mode-${mode} ${spaceHeld || panning ? 'panning' : tool !== 'draw' ? tool : ''}${shiftHeld && (tool === 'draw' || tool === 'select') ? ' shift-select' : ''}${gesturesOn && tool === 'draw' ? ' gestures' : ''}${menu && overMenu(menu) ? ' over-menu' : ''}${aiming ? ' aiming' : ''}`}
         onPointerDown={onPointerDown}
         // The create tool's cursor shows the shape it will draw (see .canvas.create).
         style={tool === 'create' ? ({ '--create-cursor': shapeCursor(createType) } as React.CSSProperties) : undefined}

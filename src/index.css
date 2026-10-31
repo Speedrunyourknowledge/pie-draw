@@ -6,6 +6,13 @@
   --accent: #3e63dd;
   --panel: #ffffff;
   --panel-line: rgba(31, 41, 51, 0.12);
+  /* The canvas draws its own cursors, in the style of the pen and eraser, rather than the system's. */
+  --cursor-crosshair: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M11 2.5 V8 M11 14 V19.5 M2.5 11 H8 M14 11 H19.5' stroke='white' stroke-width='3.6'/%3E%3Cpath d='M11 2.5 V8 M11 14 V19.5 M2.5 11 H8 M14 11 H19.5' stroke='%231f2933' stroke-width='1.6'/%3E%3C/svg%3E") 11 11, crosshair;
+  --cursor-move: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M11 3 V19 M3 11 H19 M8.5 5.5 L11 3 L13.5 5.5 M8.5 16.5 L11 19 L13.5 16.5 M5.5 8.5 L3 11 L5.5 13.5 M16.5 8.5 L19 11 L16.5 13.5' stroke='white' stroke-width='3.6'/%3E%3Cpath d='M11 3 V19 M3 11 H19 M8.5 5.5 L11 3 L13.5 5.5 M8.5 16.5 L11 19 L13.5 16.5 M5.5 8.5 L3 11 L5.5 13.5 M16.5 8.5 L19 11 L16.5 13.5' stroke='%231f2933' stroke-width='1.6'/%3E%3C/svg%3E") 11 11, move;
+  --cursor-ns-resize: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M11 3 V19 M8 6 L11 3 L14 6 M8 16 L11 19 L14 16' stroke='white' stroke-width='3.6'/%3E%3Cpath d='M11 3 V19 M8 6 L11 3 L14 6 M8 16 L11 19 L14 16' stroke='%231f2933' stroke-width='1.6'/%3E%3C/svg%3E") 11 11, ns-resize;
+  --cursor-ew-resize: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 11 H19 M6 8 L3 11 L6 14 M16 8 L19 11 L16 14' stroke='white' stroke-width='3.6'/%3E%3Cpath d='M3 11 H19 M6 8 L3 11 L6 14 M16 8 L19 11 L16 14' stroke='%231f2933' stroke-width='1.6'/%3E%3C/svg%3E") 11 11, ew-resize;
+  --cursor-nwse-resize: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 5 L17 17 M5 9.5 V5 H9.5 M17 12.5 V17 H12.5' stroke='white' stroke-width='3.6'/%3E%3Cpath d='M5 5 L17 17 M5 9.5 V5 H9.5 M17 12.5 V17 H12.5' stroke='%231f2933' stroke-width='1.6'/%3E%3C/svg%3E") 11 11, nwse-resize;
+  --cursor-nesw-resize: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17 5 L5 17 M12.5 5 H17 V9.5 M9.5 17 H5 V12.5' stroke='white' stroke-width='3.6'/%3E%3Cpath d='M17 5 L5 17 M12.5 5 H17 V9.5 M9.5 17 H5 V12.5' stroke='%231f2933' stroke-width='1.6'/%3E%3C/svg%3E") 11 11, nesw-resize;
   font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   color: var(--black);
 }
@@ -52,11 +59,11 @@ svg.canvas.eraser .shape.erase-target .halo, svg.canvas.eraser .shape.erase-targ
 }
 /* Create tool: a crosshair with the armed shape beside it (see shapeCursor.ts), over everything on
    the canvas, since a drag draws the shape wherever it starts. */
-.canvas.create, .canvas.create * { cursor: var(--create-cursor, crosshair); }
+.canvas.create, .canvas.create * { cursor: var(--create-cursor, var(--cursor-crosshair)); }
 .canvas.create .shape:hover .halo { display: none; }
 
 /* ---- shapes ---- */
-.shape { cursor: move; }
+.shape { cursor: var(--cursor-move); }
 /* The hover glow is a halo drawn behind the shape, outside its outline only (see ShapeView). */
 .shape .halo { display: none; }
 .shape:hover .halo { display: inline; }
@@ -88,8 +95,8 @@ svg.canvas.eraser .shape.erase-target .halo, svg.canvas.eraser .shape.erase-targ
   stroke: var(--accent);
   stroke-width: 1.5;
 }
-.handle-nw, .handle-se { cursor: nwse-resize; }
-.handle-ne, .handle-sw { cursor: nesw-resize; }
+.handle-nw, .handle-se { cursor: var(--cursor-nwse-resize); }
+.handle-ne, .handle-sw { cursor: var(--cursor-nesw-resize); }
 .handle:hover { fill: var(--accent); }
 
 /* ---- toast ---- */
@@ -480,7 +487,7 @@ svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo {
   stroke-dasharray: 4 3;
   pointer-events: none;
 }
-.canvas.select, .canvas.mode-selecting, .canvas.mode-selecting .shape { cursor: crosshair; }
+.canvas.select, .canvas.mode-selecting, .canvas.mode-selecting .shape { cursor: var(--cursor-crosshair); }
 .nav svg .solid { fill: currentColor; }
 
 /* ---- File menu (top bar) ---- */
@@ -538,13 +545,13 @@ svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo {
 .file-keys { color: var(--muted); font-size: 12px; }
 
 /* A multi-selection's box is one target: it takes the move cursor and covers the members' hover glow. */
-.group-area { fill: transparent; pointer-events: all; cursor: move; }
+.group-area { fill: transparent; pointer-events: all; cursor: var(--cursor-move); }
 .edge { fill: transparent; pointer-events: all; }
-.edge-n, .edge-s { cursor: ns-resize; }
-.edge-e, .edge-w { cursor: ew-resize; }
+.edge-n, .edge-s { cursor: var(--cursor-ns-resize); }
+.edge-e, .edge-w { cursor: var(--cursor-ew-resize); }
 .canvas.mode-selecting .shape:hover .halo { display: none; }
 /* Holding Shift (in the draw or select tool) means a drag box-selects, so show the select cursor. */
-.canvas.shift-select, .canvas.shift-select .shape, .canvas.shift-select .group-area { cursor: crosshair; }
+.canvas.shift-select, .canvas.shift-select .shape, .canvas.shift-select .group-area { cursor: var(--cursor-crosshair); }
 .canvas.shift-select .shape:hover .halo { display: none; }
 
 /* With the menu open it alone has focus: shapes, handles and edges beneath it give up their cursors
@@ -812,3 +819,261 @@ svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo {
 .rec-thumb:hover .rec-star, .record .rec-star.on { opacity: 1; }
 .record .rec-star.on { color: #f5a524; }
 .record .rec-star:hover { background: #fdf3df; color: #f5a524; }
+
+/* ---- assistant chat ---- */
+.topbar-actions button.on { background: #e8edfc; color: var(--accent); }
+.topbar-actions button.on:hover { background: #dde4fb; }
+.menu-open .chat { opacity: 0.35; }
+.chat {
+  position: fixed;
+  top: 60px;
+  left: 12px;
+  bottom: 16px;
+  width: 340px;
+  max-width: calc(100vw - 24px);
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(31, 41, 51, 0.1);
+  z-index: 2;
+  overflow: hidden;
+  font-size: 14px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.chat svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: none;
+}
+.sparkle-icon path { stroke-width: 1.4; }
+.chat-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 8px 8px 14px;
+  border-bottom: 1px solid var(--panel-line);
+}
+.chat-head .sparkle-icon { color: var(--accent); }
+.chat-title { font-weight: 600; }
+.chat-model {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-icon {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.chat-icon:hover:not(:disabled) { background: rgba(31, 41, 51, 0.07); color: var(--black); }
+.chat-icon:disabled { opacity: 0.35; cursor: default; }
+.chat-icon.on { color: var(--accent); }
+
+.chat-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.chat-empty { color: var(--muted); line-height: 1.45; }
+.chat-empty p { margin: 0 0 12px; }
+.chat-empty b { color: var(--black); font-weight: 600; }
+.chat-examples { display: flex; flex-wrap: wrap; gap: 6px; }
+.chat-examples button {
+  padding: 6px 10px;
+  border: 1px solid var(--panel-line);
+  border-radius: 999px;
+  background: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+.chat-examples button:hover { border-color: var(--accent); color: var(--accent); }
+.chat-empty .chat-tip { margin: 10px 0 0; font-size: 13px; }
+
+.chat-msg { line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-msg.user {
+  align-self: flex-end;
+  max-width: 85%;
+  padding: 7px 12px;
+  border-radius: 14px 14px 4px 14px;
+  background: var(--accent);
+  color: #fff;
+}
+.chat-msg.user + .chat-msg:not(.user) { margin-top: 4px; }
+.chat-msg.assistant { align-self: flex-start; max-width: 95%; }
+.chat-msg.action {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  margin: -4px 0;
+}
+.chat-msg.action svg { width: 15px; height: 15px; color: #30a46c; stroke-width: 2; }
+.chat-msg.error { color: #c62a2f; font-size: 13px; }
+.chat-msg.thinking { display: flex; gap: 4px; padding: 6px 0; }
+.chat-msg.thinking i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  opacity: 0.3;
+  animation: chat-dot 1s infinite ease-in-out;
+}
+.chat-msg.thinking i:nth-child(2) { animation-delay: 0.15s; }
+.chat-msg.thinking i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes chat-dot { 40% { opacity: 1; transform: translateY(-2px); } }
+
+.chat-input {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin: 0 10px 10px;
+  padding: 6px 6px 6px 12px;
+  border: 1px solid var(--panel-line);
+  border-radius: 12px;
+  background: #fff;
+}
+.chat-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(62, 99, 221, 0.12); }
+.chat-input textarea {
+  flex: 1;
+  resize: none;
+  border: none;
+  outline: none;
+  padding: 5px 0;
+  font: inherit;
+  line-height: 1.4;
+  color: inherit;
+  background: transparent;
+}
+.chat-send {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+.chat-send svg { stroke-width: 2; }
+.chat-send:disabled { background: rgba(31, 41, 51, 0.12); cursor: default; }
+.chat-send.stop { background: var(--black); }
+.chat-send.stop rect { fill: currentColor; stroke: none; }
+
+.chat-settings {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.chat-settings p { margin: 0; color: var(--muted); line-height: 1.45; }
+.chat-settings .hint { font-size: 12px; }
+.chat-settings code { font-size: 11px; background: rgba(31, 41, 51, 0.06); padding: 1px 4px; border-radius: 4px; }
+.chat-settings label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; }
+.chat-settings .optional { font-weight: 400; color: var(--muted); }
+.chat-settings input {
+  padding: 8px 10px;
+  border: 1px solid var(--panel-line);
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 400;
+  outline: none;
+}
+.chat-settings input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(62, 99, 221, 0.12); }
+.chat-seg { display: flex; padding: 3px; border-radius: 9px; background: rgba(31, 41, 51, 0.06); }
+.chat-seg button {
+  flex: 1;
+  padding: 6px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  font-size: 13px;
+  cursor: pointer;
+}
+.chat-seg button.on { background: #fff; box-shadow: 0 1px 3px rgba(31, 41, 51, 0.15); font-weight: 600; }
+.chat-save {
+  align-self: flex-end;
+  padding: 8px 18px;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+.chat-save:disabled { opacity: 0.4; cursor: default; }
+
+/* While typing a message the pointer only aims: the marker below stands in for the cursor, and the
+   tools' cursors and hover glows are hidden. !important outranks every tool and modifier cursor. */
+svg.canvas.aiming, svg.canvas.aiming * { cursor: none !important; }
+svg.canvas.aiming .shape .halo { display: none !important; }
+
+/* Where "here" is while typing a message. */
+.here-marker {
+  position: fixed;
+  width: 24px;
+  height: 24px;
+  margin: -12px 0 0 -12px;
+  pointer-events: none;
+  z-index: 1;
+  fill: rgba(62, 99, 221, 0.12);
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+/* Where the pointer is while the system hides it after typing, until the mouse moves. */
+.pointer-hint {
+  position: fixed;
+  pointer-events: none;
+  z-index: 10;
+  filter: drop-shadow(0 0 1px #fff);
+}
+.pointer-hint svg {
+  position: absolute;
+  fill: none;
+  stroke: var(--muted);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.pointer-hint-ring {
+  width: 22px;
+  height: 22px;
+  left: -11px;
+  top: -11px;
+  stroke-width: 1.4; /* 1.5px on screen, since the 20-unit drawing is shown at 22px */
+}
+/* Beside the ring, lower right, like the shape tool's cursor shows its shape. */
+.pointer-hint-tool {
+  width: 20px;
+  height: 20px;
+  left: 3px;
+  top: 3px;
+  stroke-width: 1.5;
+}
+/* The cursor's own image keeps its size, as on the canvas. */
+img.pointer-hint-tool { position: absolute; width: auto; height: auto; }

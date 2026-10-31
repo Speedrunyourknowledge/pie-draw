@@ -28,6 +28,7 @@ const KEYS: [string, string][] = [
   [kbd('mod+alt+n'), 'New document'],
   ['Enter', 'Place the shape chosen from the menu'],
   ['Esc', 'Close menu, leave a tool, or deselect'],
+  ['/', 'Open the assistant'],
   ['?', 'Show Help menu'],
 ];
 
@@ -66,6 +67,10 @@ export function HelpPanel() {
             <li><b>Keyboard:</b> <Key>M</Key> opens the menu. With the menu open, use <Key>←</Key> <Key>→</Key> to move around the ring. To enter a submenu, use <Key>↑</Key>. To leave it, use <Key>↓</Key>. Press <Key>Enter</Key> to choose an option.</li>
             <li><b>Cancel</b> by selecting the red X in the center, or by moving past the menu's edge. Esc works too.</li>
             <li>The <b>File</b> menu at the top allows you to save and open your drawings.</li>
+            <li>
+              <b>Assistant:</b> click <b>Assistant</b> in the top bar (or press <Key>/</Key>) and type requests like “put a red circle here” or “delete the blue shapes”.
+              While typing, <b>point with the mouse</b>: “here” is the pointer, and “this” is the shape under it.
+            </li>
             <li>
               <b>Gestures:</b> with Gestures on (top bar, or <Key>G</Key>), single strokes create shapes, select, copy, paste, set colors and delete.{' '}
               <button className="help-link" onClick={() => useStore.getState().setGestureGuideOpen(true)}>See all gestures →</button>
