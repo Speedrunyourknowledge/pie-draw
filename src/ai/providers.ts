@@ -1,4 +1,5 @@
 import type Anthropic from '@anthropic-ai/sdk';
+import type { Picture } from './snapshot';
 import type { ToolSpec } from './tools';
 
 // One step of the conversation with whichever model is configured: send the history and the tools,
@@ -31,12 +32,35 @@ export interface ToolCall {
   input: Record<string, unknown>;
 }
 
+/**
+ * Text that may come with a picture of the canvas. `textOnly` stands in for `content` when the
+ * picture can't be sent (it carries the full shape list instead).
+ */
+export interface WithPicture {
+  content: string;
+  image?: Picture;
+  textOnly?: string;
+}
+
+export interface ToolResult extends WithPicture {
+  id: string;
+  isError: boolean;
+}
+
 export type Turn =
-  | { role: 'user'; content: string }
+  // `attachments` are pictures the user attached, kept for the whole conversation.
+  | ({ role: 'user'; attachments?: Picture[] } & WithPicture)
   // `raw` is the provider's own content, replayed as-is to the same provider (Claude needs its
   // thinking blocks back unchanged).
   | { role: 'assistant'; text: string; calls: ToolCall[]; raw?: { provider: Provider; content: unknown } }
-  | { role: 'tool'; results: { id: string; content: string; isError: boolean }[] };
+  | { role: 'tool'; results: ToolResult[] };
+
+/** What to send for content that may have a picture: the picture if `vision`, else the text-only form. */
+function pick(c: WithPicture, vision: boolean): { text: string; image?: Picture } {
+  return vision && c.image ? { text: c.content, image: c.image } : { text: c.textOnly ?? c.content };
+}
+
+const NO_VISION_NOTE = (n: number) => `[The user attached ${n === 1 ? 'a picture' : `${n} pictures`}, but this model can't see images.]`;
 
 export interface StepResult {
   text: string;
@@ -46,10 +70,16 @@ export interface StepResult {
   stop: 'done' | 'tools' | 'refused' | 'truncated';
 }
 
-export function step(settings: AiSettings, system: string, tools: ToolSpec[], turns: Turn[], signal: AbortSignal) {
+/** `vision` false sends every message as text only, for models that can't read images. */
+export function step(settings: AiSettings, system: string, tools: ToolSpec[], turns: Turn[], signal: AbortSignal, vision: boolean) {
   return settings.provider === 'anthropic'
-    ? anthropicStep(settings, system, tools, turns, signal)
-    : openaiStep(settings, system, tools, turns, signal);
+    ? anthropicStep(settings, system, tools, turns, signal, vision)
+    : openaiStep(settings, system, tools, turns, signal, vision);
+}
+
+/** Whether a failed request looks like the model refusing images, so it can be retried as text. */
+export function rejectsImages(e: unknown): boolean {
+  return /image|vision|multi-?modal|modalit/i.test(describeError(e)) && !/rate limit|api key/i.test(describeError(e));
 }
 
 /** A readable message for a failed request. */
@@ -70,7 +100,9 @@ function anthropicError(SDK: typeof Anthropic, e: unknown): unknown {
 // ---- Anthropic (Claude) ----
 
 
-async function anthropicStep(settings: AiSettings, system: string, tools: ToolSpec[], turns: Turn[], signal: AbortSignal): Promise<StepResult> {
+const anthropicImage = (p: Picture) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: p.mediaType, data: p.data } });
+
+async function anthropicStep(settings: AiSettings, system: string, tools: ToolSpec[], turns: Turn[], signal: AbortSignal, vision: boolean): Promise<StepResult> {
   // Loaded on first use, so the app doesn't download the SDK until someone chats with Claude.
   const { default: SDK } = await import('@anthropic-ai/sdk');
   const client = new SDK({
@@ -81,11 +113,30 @@ async function anthropicStep(settings: AiSettings, system: string, tools: ToolSp
   });
 
   const messages: Anthropic.Beta.BetaMessageParam[] = turns.map((t) => {
-    if (t.role === 'user') return { role: 'user', content: t.content };
+    if (t.role === 'user') {
+      const { text, image } = pick(t, vision);
+      const attached = t.attachments ?? [];
+      if (!image && (attached.length === 0 || !vision)) {
+        return { role: 'user', content: attached.length > 0 ? `${NO_VISION_NOTE(attached.length)}\n${text}` : text };
+      }
+      // The user's pictures first, then their words and the canvas, then the picture of the canvas.
+      return {
+        role: 'user',
+        content: [...attached.map(anthropicImage), { type: 'text' as const, text }, ...(image ? [anthropicImage(image)] : [])],
+      };
+    }
     if (t.role === 'tool') {
       return {
         role: 'user',
-        content: t.results.map((r) => ({ type: 'tool_result' as const, tool_use_id: r.id, content: r.content, is_error: r.isError })),
+        content: t.results.map((r) => {
+          const { text, image } = pick(r, vision);
+          return {
+            type: 'tool_result' as const,
+            tool_use_id: r.id,
+            content: image ? [{ type: 'text' as const, text }, anthropicImage(image)] : text,
+            is_error: r.isError,
+          };
+        }),
       };
     }
     if (t.raw?.provider === 'anthropic') return { role: 'assistant', content: t.raw.content as Anthropic.Beta.BetaContentBlockParam[] };
@@ -131,12 +182,28 @@ interface OpenAiToolCall {
   function: { name: string; arguments: string };
 }
 
-async function openaiStep(settings: AiSettings, system: string, tools: ToolSpec[], turns: Turn[], signal: AbortSignal): Promise<StepResult> {
+const openaiImage = (p: Picture) => ({ type: 'image_url', image_url: { url: `data:${p.mediaType};base64,${p.data}` } });
+
+async function openaiStep(settings: AiSettings, system: string, tools: ToolSpec[], turns: Turn[], signal: AbortSignal, vision: boolean): Promise<StepResult> {
   const messages: unknown[] = [{ role: 'system', content: system }];
   for (const t of turns) {
-    if (t.role === 'user') messages.push({ role: 'user', content: t.content });
-    else if (t.role === 'tool') {
-      for (const r of t.results) messages.push({ role: 'tool', tool_call_id: r.id, content: r.content });
+    if (t.role === 'user') {
+      const { text, image } = pick(t, vision);
+      const attached = t.attachments ?? [];
+      if (!image && (attached.length === 0 || !vision)) {
+        messages.push({ role: 'user', content: attached.length > 0 ? `${NO_VISION_NOTE(attached.length)}\n${text}` : text });
+      } else {
+        messages.push({ role: 'user', content: [...attached.map(openaiImage), { type: 'text', text }, ...(image ? [openaiImage(image)] : [])] });
+      }
+    } else if (t.role === 'tool') {
+      // Tool messages can't hold images here, so pictures follow in one user message after them.
+      const pictures: unknown[] = [];
+      for (const r of t.results) {
+        const { text, image } = pick(r, vision);
+        messages.push({ role: 'tool', tool_call_id: r.id, content: text });
+        if (image) pictures.push({ type: 'text', text: `The picture from tool call ${r.id}:` }, openaiImage(image));
+      }
+      if (pictures.length > 0) messages.push({ role: 'user', content: pictures });
     } else {
       messages.push({
         role: 'assistant',

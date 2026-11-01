@@ -1,16 +1,22 @@
 import { create } from 'zustand';
 import type { Pt } from '../types';
-import { DEFAULT_MODEL, describeError, step, type AiSettings, type Provider, type Turn } from './providers';
+import { DEFAULT_MODEL, describeError, rejectsImages, step, type AiSettings, type Provider, type StepResult, type Turn } from './providers';
+import { compact } from './compact';
 import { SYSTEM_PROMPT } from './prompt';
-import { TOOLS, beginToolRun, canvasState, runTool, type Pointing } from './tools';
+import { pictureUrl, type Picture } from './snapshot';
+import { TOOLS, beginToolRun, canvasView, runTool, withPicture, type Pointing } from './tools';
 
 const SETTINGS_KEY = 'pie-draw:ai';
 const MAX_STEPS = 30; // model calls per message (a scene takes a few dozen batches at most), so a confused model can't loop forever
+/** Pictures the user can attach to one message. */
+export const MAX_ATTACHMENTS = 4;
 
 export interface LogItem {
   id: number;
   kind: 'user' | 'assistant' | 'error';
   text: string;
+  /** Attached pictures, as data: URLs to show. */
+  images?: string[];
 }
 
 const ENV_PROVIDER: Provider = import.meta.env.VITE_AI_PROVIDER === 'openai' ? 'openai' : 'anthropic';
@@ -21,6 +27,9 @@ const ENV_PROVIDER: Provider = import.meta.env.VITE_AI_PROVIDER === 'openai' ? '
  */
 export const usesProxy = (s: AiSettings) =>
   import.meta.env.AI_PROXY === true && !s.apiKey && s.provider === ENV_PROVIDER && s.baseUrl === (import.meta.env.VITE_AI_SERVER_URL ?? '');
+
+/** Which model this is, for remembering what it can do: the same name on another server may differ. */
+const modelKey = (s: AiSettings) => `${s.provider} ${s.baseUrl} ${s.model}`;
 
 /** Settings from localStorage, else from VITE_AI_* variables (e.g. in .env.local). */
 function readSettings(): AiSettings {
@@ -56,11 +65,16 @@ interface ChatState {
   inputFocused: boolean;
   /** Screen x where the canvas stops being covered by the chat panel. */
   visibleLeft: number;
+  /**
+   * Models (by modelKey) that turned down a picture: they get text in place of pictures until the page
+   * reloads or their settings are saved again (in case a different model now runs under the name).
+   */
+  noVision: string[];
 
   setOpen: (open: boolean, focus?: boolean) => void;
-  send: (text: string) => Promise<void>;
+  send: (text: string, attachments?: Picture[]) => Promise<void>;
   /** Stops the reply in progress and sends this message instead. */
-  sendNow: (text: string) => void;
+  sendNow: (text: string, attachments?: Picture[]) => void;
   stop: () => void;
   clear: () => void;
   saveSettings: (settings: AiSettings) => void;
@@ -79,6 +93,7 @@ export const useChat = create<ChatState>()((set, get) => {
   const dropUnanswered = () =>
     set((st) => (st.turns.at(-1)?.role === 'user' ? { turns: st.turns.slice(0, -1) } : {}));
   const pointing = (): Pointing => ({ pointer: get().pointer, visibleLeft: get().visibleLeft });
+  const wantsPictures = () => !get().noVision.includes(modelKey(get().settings));
   /** Ends the reply in progress, noting it in the log as `note`. */
   const abort = (note: string) => {
     if (!controller) return;
@@ -99,26 +114,48 @@ export const useChat = create<ChatState>()((set, get) => {
     pointer: null,
     inputFocused: false,
     visibleLeft: 0,
+    noVision: [],
 
     setOpen: (open, focus = false) => set((st) => ({ open, focusRequest: focus ? st.focusRequest + 1 : st.focusRequest })),
 
-    send: async (text) => {
+    send: async (text, attachments = []) => {
       const { settings, busy } = get();
-      if (busy || !text.trim()) return;
-      log('user', text.trim());
+      if (busy || (!text.trim() && attachments.length === 0)) return;
+      const words = text.trim() || (attachments.length === 1 ? 'Here is a picture.' : 'Here are some pictures.');
+      if (attachments.length > 0) set((st) => ({ log: [...st.log, { id: nextId++, kind: 'user', text: text.trim(), images: attachments.map(pictureUrl) }] }));
+      else log('user', words);
+      // Said every time, so a picture attached again doesn't seem to be ignored.
+      if (attachments.length > 0 && !wantsPictures()) log('error', 'This model can’t read images, so your picture wasn’t sent.');
       const logStart = get().log.length;
       // The pointer and canvas are captured when the message is sent, which is when the user is pointing.
-      pushTurn({ role: 'user', content: `${text.trim()}\n\n<canvas>${canvasState(pointing())}</canvas>` });
-      // Through the dev server, the key sent is a placeholder that it swaps for the real one.
-      const viaProxy = usesProxy(settings) ? { ...settings, apiKey: 'from-dev-server', baseUrl: `${location.origin}/__ai` } : settings;
+      const view = canvasView(pointing());
       controller = new AbortController();
       const { signal } = controller;
-      set({ busy: true });
+      set({ busy: true, turns: compact(get().turns) });
+      const message = await withPicture(view, (canvas) => `${words}\n\n<canvas>${canvas}</canvas>`, wantsPictures());
+      if (signal.aborted) return;
+      pushTurn({ role: 'user', ...message, ...(attachments.length > 0 ? { attachments } : {}) });
+      // Through the dev server, the key sent is a placeholder that it swaps for the real one.
+      const viaProxy = usesProxy(settings) ? { ...settings, apiKey: 'from-dev-server', baseUrl: `${location.origin}/__ai` } : settings;
       beginToolRun();
       let usedTools = false;
+      const ask = async (): Promise<StepResult> => {
+        const vision = wantsPictures();
+        try {
+          return await step(viaProxy, SYSTEM_PROMPT, TOOLS, get().turns, signal, vision);
+        } catch (e) {
+          // A model that can't read images: carry on with text, and don't try pictures with it again
+          // until the user asks to (by reloading or saving its settings).
+          if (!vision || signal.aborted || !rejectsImages(e)) throw e;
+          set({ noVision: [...get().noVision, modelKey(settings)] });
+          const lost = attachments.length > 0 ? 'your picture wasn’t sent, and ' : '';
+          log('error', `This model can’t read images, so ${lost}the canvas is sent as text from now on. To try images again, reload the page or save the model settings again.`);
+          return step(viaProxy, SYSTEM_PROMPT, TOOLS, get().turns, signal, false);
+        }
+      };
       try {
         for (let i = 0; i < MAX_STEPS; i++) {
-          const res = await step(viaProxy, SYSTEM_PROMPT, TOOLS, get().turns, signal);
+          const res = await ask();
           if (signal.aborted) return;
           pushTurn({ role: 'assistant', text: res.text, calls: res.calls, raw: res.raw });
           if (res.text) log('assistant', res.text);
@@ -132,10 +169,9 @@ export const useChat = create<ChatState>()((set, get) => {
           }
           // Run in order: later calls often depend on the selection earlier ones made.
           usedTools = true;
-          const results = res.calls.map((c) => {
-            const out = runTool(c.name, c.input, pointing());
-            return { id: c.id, content: out.result, isError: !!out.isError };
-          });
+          const results = [];
+          for (const c of res.calls) results.push({ id: c.id, ...(await runTool(c.name, c.input, pointing(), wantsPictures())) });
+          if (signal.aborted) return;
           pushTurn({ role: 'tool', results });
         }
         log('error', 'Stopped after too many steps.');
@@ -152,10 +188,10 @@ export const useChat = create<ChatState>()((set, get) => {
       }
     },
 
-    sendNow: (text) => {
-      if (!text.trim()) return;
+    sendNow: (text, attachments = []) => {
+      if (!text.trim() && attachments.length === 0) return;
       abort('Interrupted.');
-      void get().send(text);
+      void get().send(text, attachments);
     },
 
     stop: () => abort('Stopped.'),
@@ -171,7 +207,8 @@ export const useChat = create<ChatState>()((set, get) => {
       } catch {
         // Storage unavailable: the settings last until reload.
       }
-      set({ settings });
+      // Saving a model's settings tries pictures with it again (its server may have a different model now).
+      set({ settings, noVision: get().noVision.filter((k) => k !== modelKey(settings)) });
     },
 
     setPointer: (pointer) => set({ pointer }),

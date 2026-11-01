@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { isConfigured, usesProxy, useChat } from '../ai/chat';
+import { MAX_ATTACHMENTS, isConfigured, usesProxy, useChat } from '../ai/chat';
 import { DEFAULT_MODEL, DEFAULT_URL, type AiSettings, type Provider } from '../ai/providers';
+import { IMAGE_TYPES, pictureUrl, readImageFile, type Picture } from '../ai/snapshot';
 import { useStore } from '../store';
 import { toScreen, toWorld } from '../view';
 import { PointerHint } from './PointerHint';
@@ -142,6 +143,7 @@ function Conversation({ onLeave }: { onLeave: () => void }) {
   const busy = useChat((s) => s.busy);
   const focusRequest = useChat((s) => s.focusRequest);
   const [text, setText] = useState('');
+  const [attachments, setAttachments] = useState<Picture[]>([]);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -160,13 +162,30 @@ function Conversation({ onLeave }: { onLeave: () => void }) {
 
   // While a reply is running, sending interrupts it: the new message goes now, not after.
   const send = (msg = text) => {
-    if (!msg.trim()) return;
-    if (busy) useChat.getState().sendNow(msg);
-    else void useChat.getState().send(msg);
+    if (!msg.trim() && attachments.length === 0) return;
+    if (busy) useChat.getState().sendNow(msg, attachments);
+    else void useChat.getState().send(msg, attachments);
     setText('');
+    setAttachments([]);
   };
   const stop = () => useChat.getState().stop();
-  const hasText = !!text.trim();
+  const hasText = !!text.trim() || attachments.length > 0;
+
+  /** Checks and reads the files, keeping the images and naming the rest in a toast. */
+  const attach = async (files: File[]) => {
+    const room = MAX_ATTACHMENTS - attachments.length;
+    if (files.length > room) useStore.getState().showToast(`Up to ${MAX_ATTACHMENTS} pictures per message.`, 'error');
+    const read: Picture[] = [];
+    for (const file of files.slice(0, Math.max(0, room))) {
+      try {
+        read.push(await readImageFile(file));
+      } catch (e) {
+        useStore.getState().showToast(e instanceof Error ? e.message : String(e), 'error');
+      }
+    }
+    if (read.length > 0) setAttachments((a) => [...a, ...read].slice(0, MAX_ATTACHMENTS));
+    inputRef.current?.focus();
+  };
 
   return (
     <>
@@ -191,8 +210,13 @@ function Conversation({ onLeave }: { onLeave: () => void }) {
           </div>
         )}
         {log.map((item) => (
-          <div key={item.id} className={`chat-msg ${item.kind}`}>
-            <span>{item.text}</span>
+          <div key={item.id} className={`chat-msg ${item.kind}${item.images ? ' has-images' : ''}`}>
+            {item.images && (
+              <div className="chat-msg-images">
+                {item.images.map((src, i) => <img key={i} src={src} alt="Attached picture" />)}
+              </div>
+            )}
+            {item.text && <span>{item.text}</span>}
             {(item.kind === 'user' || item.kind === 'assistant') && <CopyButton text={item.text} />}
           </div>
         ))}
@@ -205,12 +229,31 @@ function Conversation({ onLeave }: { onLeave: () => void }) {
           send();
         }}
       >
+        {attachments.length > 0 && (
+          <div className="chat-attachments">
+            {attachments.map((p, i) => (
+              <div key={i} className="chat-attachment">
+                <img src={pictureUrl(p)} alt="Attached picture" />
+                <button type="button" onClick={() => setAttachments((a) => a.filter((_, j) => j !== i))} data-tip="Remove" aria-label="Remove picture">
+                  <svg viewBox="0 0 20 20"><path d="M6 6 L14 14 M14 6 L6 14" /></svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <textarea
           ref={inputRef}
           rows={1}
           value={text}
           placeholder="Ask the assistant…"
           onChange={(e) => setText(e.target.value)}
+          onPaste={(e) => {
+            // Pasted images attach, through the same checks as uploads; pasted text goes in as usual.
+            const files = [...e.clipboardData.files];
+            if (files.length === 0) return;
+            e.preventDefault();
+            void attach(files);
+          }}
           onFocus={() => useChat.getState().setInputFocused(true)}
           onBlur={() => useChat.getState().setInputFocused(false)}
           onKeyDown={(e) => {
@@ -224,6 +267,9 @@ function Conversation({ onLeave }: { onLeave: () => void }) {
             }
           }}
         />
+        <div className="chat-input-bar">
+        <AttachMenu onFiles={attach} disabled={attachments.length >= MAX_ATTACHMENTS} />
+        <span className="chat-input-gap" />
         {/* Keyed, so React never turns the stop button into the send button under a click: the
             click would then finish as a submit. Neither button submits; Enter and clicks go through send(). */}
         {busy && (
@@ -245,6 +291,7 @@ function Conversation({ onLeave }: { onLeave: () => void }) {
             <svg viewBox="0 0 20 20"><path d="M10 16 V4 M5 9 L10 4 L15 9" /></svg>
           </button>
         )}
+        </div>
       </form>
     </>
   );
@@ -254,6 +301,85 @@ const PROVIDERS: { id: Provider; label: string }[] = [
   { id: 'anthropic', label: 'Claude' },
   { id: 'openai', label: 'OpenAI-Compatible' },
 ];
+
+/** The + button under the message box, opening a menu with "Upload image". */
+function AttachMenu({ onFiles, disabled }: { onFiles: (files: File[]) => void; disabled: boolean }) {
+  const [open, setOpen] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const down = (e: PointerEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setOpen(false);
+      }
+    };
+    window.addEventListener('pointerdown', down);
+    window.addEventListener('keydown', key, true);
+    return () => {
+      window.removeEventListener('pointerdown', down);
+      window.removeEventListener('keydown', key, true);
+    };
+  }, [open]);
+
+  return (
+    <div className="chat-attach" ref={rootRef}>
+      <button
+        type="button"
+        className={`chat-plus${open ? ' on' : ''}`}
+        onClick={() => setOpen(!open)}
+        disabled={disabled}
+        data-tip={disabled ? `Up to ${MAX_ATTACHMENTS} pictures` : 'Add'}
+        data-tip-side="right"
+        aria-label="Add"
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        {/* lucide: plus */}
+        <svg viewBox="0 0 24 24" strokeWidth={2}><path d="M5 12h14" /><path d="M12 5v14" /></svg>
+      </button>
+      {open && (
+        <div className="chat-menu" role="menu">
+          <button
+            type="button"
+            role="menuitem"
+            autoFocus
+            onClick={() => {
+              setOpen(false);
+              fileRef.current?.click();
+            }}
+          >
+            {/* lucide: image */}
+            <svg viewBox="0 0 24 24" strokeWidth={2}>
+              <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+              <circle cx="9" cy="9" r="2" />
+              <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+            </svg>
+            Upload image
+          </button>
+        </div>
+      )}
+      {/* The picker offers images only; readImageFile checks each file again, since a picker can be told to show all files. */}
+      <input
+        ref={fileRef}
+        type="file"
+        accept={IMAGE_TYPES.join(',')}
+        multiple
+        hidden
+        onChange={(e) => {
+          const files = [...(e.target.files ?? [])];
+          e.target.value = ''; // so choosing the same file again still fires
+          if (files.length > 0) onFiles(files);
+        }}
+      />
+    </div>
+  );
+}
 
 function Settings({ onDone }: { onDone: () => void }) {
   const [draft, setDraft] = useState<AiSettings>(useChat.getState().settings);

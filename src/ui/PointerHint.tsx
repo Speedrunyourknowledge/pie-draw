@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useStore } from '../store';
 
 // The hand tool uses the system's hand cursor, which a page can't copy, so it shows the toolbar's hand.
@@ -33,10 +33,22 @@ export function PointerHint({ at, onDone }: { at: { x: number; y: number }; onDo
   // Any change to the drawing's state (Esc again dropping back to the pen, say) can change the
   // cursor, so read it again on each one. The marker lasts only until the mouse moves.
   const state = useStore();
-  const [image, setImage] = useState<string | null>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const handRef = useRef<SVGSVGElement>(null);
 
   // After the commit, so the canvas has already dropped its aiming cursor or taken the new tool's.
-  useLayoutEffect(() => setImage(cursorImageAt(at.x, at.y)), [at, state]);
+  // The cursor is read from the page, so it's shown by updating the page directly too, before the
+  // browser paints, with no second render.
+  useLayoutEffect(() => {
+    const image = cursorImageAt(at.x, at.y);
+    const img = imgRef.current!;
+    img.style.display = image ? '' : 'none';
+    if (image) {
+      img.src = image;
+      img.classList.toggle('pen', isPen(image));
+    }
+    if (handRef.current) handRef.current.style.display = image ? 'none' : ''; // the hand only stands in for a missing image
+  }, [at, state, hand]);
 
   useEffect(() => {
     // Browsers can send a move without one after the page changes, so only a real move counts.
@@ -60,14 +72,11 @@ export function PointerHint({ at, onDone }: { at: { x: number; y: number }; onDo
       <svg className="pointer-hint-ring" viewBox="-10 -10 20 20">
         <circle r="6" />
       </svg>
-      {image ? (
-        <img className={`pointer-hint-tool${isPen(image) ? ' pen' : ''}`} src={image} alt="" />
-      ) : (
-        hand && (
-          <svg className="pointer-hint-tool" viewBox="0 0 20 20">
-            <path d={HAND_ICON} />
-          </svg>
-        )
+      <img ref={imgRef} className="pointer-hint-tool" alt="" style={{ display: 'none' }} />
+      {hand && (
+        <svg ref={handRef} className="pointer-hint-tool" viewBox="0 0 20 20">
+          <path d={HAND_ICON} />
+        </svg>
       )}
     </div>
   );

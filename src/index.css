@@ -1117,8 +1117,8 @@ svg.canvas .shape.drop-target .halo.closed { --halo-opacity: 0.95; }
 
 .chat-input {
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
+  flex-direction: column;
+  gap: 4px;
   margin: 0 10px 10px;
   padding: 6px 6px 6px 12px;
   border: 1px solid var(--panel-line);
@@ -1137,6 +1137,74 @@ svg.canvas .shape.drop-target .halo.closed { --halo-opacity: 0.95; }
   color: inherit;
   background: transparent;
 }
+.chat-input-bar { display: flex; align-items: center; gap: 8px; margin-left: -6px; }
+.chat-input-gap { flex: 1; }
+.chat-attach { position: relative; }
+.chat-plus {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.chat-plus svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; }
+.chat-plus:hover:not(:disabled), .chat-plus.on { background: rgba(31, 41, 51, 0.07); color: var(--black); }
+.chat-plus:disabled { opacity: 0.4; cursor: default; }
+.chat-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 5;
+  min-width: 160px;
+  padding: 4px;
+  border: 1px solid var(--panel-line);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 6px 20px rgba(31, 41, 51, 0.14);
+}
+.chat-menu button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.chat-menu button:hover, .chat-menu button:focus-visible { background: rgba(31, 41, 51, 0.07); outline: none; }
+.chat-menu svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; }
+.chat-attachments { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 4px; }
+.chat-attachment { position: relative; width: 56px; height: 56px; }
+.chat-attachment img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; border: 1px solid var(--panel-line); }
+.chat-attachment button {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--black);
+  color: #fff;
+  cursor: pointer;
+}
+.chat-attachment button svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.chat-msg.has-images { display: flex; flex-direction: column; gap: 6px; }
+.chat-msg-images { display: flex; flex-wrap: wrap; gap: 6px; }
+.chat-msg-images img { max-width: 140px; max-height: 140px; border-radius: 7px; display: block; }
 .chat-send {
   width: 30px;
   height: 30px;

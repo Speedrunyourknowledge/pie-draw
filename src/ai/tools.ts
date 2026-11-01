@@ -1,8 +1,10 @@
 import { MAX_SWATCHES, colorLabel, normalizeHex } from '../colors';
-import { anchorsOf, dist, frameOf, isLine, groupFrame, makeFreehand, makePrimitive, makePrimitiveInBox, makeTriangle, mustScaleEvenly, normAngle, scaleAbout, toWorldFn } from '../geometry';
+import { anchorsOf, dist, frameOf, isLine, groupFrame, worldBounds, makeFreehand, makePrimitive, makePrimitiveInBox, makeTriangle, mustScaleEvenly, normAngle, scaleAbout, toWorldFn } from '../geometry';
 import { useStore } from '../store';
 import { PALETTE, type PrimitiveType, type Pt, type Shape } from '../types';
 import { fitToContent, resetZoom, toScreen, toWorld, zoomIn, zoomOut } from '../view';
+import type { WithPicture } from './providers';
+import { gridStep, renderPicture, type Area } from './snapshot';
 
 // The assistant's tools. Each one is a thin wrapper over an action the app already has (the same
 // store calls the pie menu, gestures and keyboard make), so the assistant can do nothing a user can't.
@@ -18,6 +20,8 @@ export interface ToolOutcome {
   /** Sent back to the model. The chat doesn't show tool use: the user watches the canvas change. */
   result: string;
   isError?: boolean;
+  /** A view of the canvas to send with the result, as a picture (or as text, for models that can't see). */
+  view?: CanvasView;
 }
 
 const COLOR_NAMES = PALETTE.map((c) => c.name.toLowerCase());
@@ -26,15 +30,47 @@ const SHAPES: PrimitiveType[] = ['square', 'rectangle', 'circle', 'ellipse', 'tr
 const MIN_SIZE = 6; // same floor as scaling on the canvas
 const MAX_SIZE = 5000;
 const MAX_BATCH = 200;
+/** Canvases with at most this many shapes have the full list sent with every view: cheap, and it saves a call. */
+export const LIST_LIMIT = 50;
+/**
+ * The most shapes listed when no picture can be sent, so a huge drawing can't fill the model's
+ * context (about 30-35 tokens a shape). Past it, the shapes on screen are kept, frontmost first.
+ */
+export const TEXT_LIST_MAX = 300;
+const FIND_LIMIT = 100;
+const FIND_MAX = 300;
 
 const num = { type: 'number' };
+const areaParam = {
+  type: 'object',
+  properties: { left: num, top: num, right: num, bottom: num },
+  required: ['left', 'top', 'right', 'bottom'],
+};
 const colorParam = (what: string) => ({ type: 'string', description: `${what} ${COLOR_HELP}` });
 
 export const TOOLS: ToolSpec[] = [
   {
-    name: 'get_canvas',
-    description: 'Returns the current canvas state, in the same format as the <canvas> block in user messages.',
-    parameters: { type: 'object', properties: {} },
+    name: 'view_canvas',
+    description: `Returns a fresh picture of the canvas with the same header as the <canvas> block in user messages. Use it to check your work partway through a task (draw a layer, look, fix what's off). With area, pictures only that part of the canvas, to look closely. With at most ${LIST_LIMIT} shapes, the full shape list comes too.`,
+    parameters: {
+      type: 'object',
+      properties: { area: { ...areaParam, description: 'The part of the canvas to picture. Leave out for the visible area.' } },
+    },
+  },
+  {
+    name: 'find_shapes',
+    description: `Returns exact geometry (ids, centers, sizes, corners, line ends, colors) of shapes matching every filter given, back to front. With no filters, lists every shape. Use it for exact positions before editing or connecting shapes; the picture is only roughly accurate. Returns at most limit shapes (default ${FIND_LIMIT}, at most ${FIND_MAX}).`,
+    parameters: {
+      type: 'object',
+      properties: {
+        ids: { type: 'array', items: { type: 'string' }, description: 'Only these shapes.' },
+        area: { ...areaParam, description: 'Only shapes that reach into this area.' },
+        types: { type: 'array', items: { type: 'string', enum: [...SHAPES, 'line', 'freehand'] }, description: 'Only shapes of these types.' },
+        color: { type: 'string', description: `Only shapes with this line or fill color. ${COLOR_HELP}` },
+        selected: { type: 'boolean', description: 'true for only the selected shapes.' },
+        limit: { type: 'integer', minimum: 1, maximum: FIND_MAX },
+      },
+    },
   },
   {
     name: 'create_shapes',
@@ -246,43 +282,159 @@ export interface Pointing {
   visibleLeft: number;
 }
 
-/** The canvas as the model sees it: a compact JSON summary. */
-export function canvasState({ pointer, visibleLeft }: Pointing): string {
-  const st = useStore.getState();
+/** One shape as the model sees it. */
+function describe(s: Shape) {
+  // A straight line is given by its end points, which say more than a box.
+  if (isLine(s)) {
+    const [[x1, y1], [x2, y2]] = s.points.map(toWorldFn(s));
+    return { id: alias(s.id), type: 'line', x1: r(x1), y1: r(y1), x2: r(x2), y2: r(y2), line: colorName(s.stroke) };
+  }
+  // Size is the shape's own width and height, before any rotation.
+  const f = frameOf(s);
+  return {
+    id: alias(s.id),
+    type: s.type,
+    x: r(f.cx),
+    y: r(f.cy),
+    width: r(f.w),
+    height: r(f.h),
+    ...(s.rotation ? { rotation: Math.round(s.rotation) } : {}),
+    // Exact corners, so a line can be drawn from or to one (in the shape's own order, clockwise).
+    ...(s.type === 'freehand' || s.type === 'circle' || s.type === 'ellipse' ? {} : { corners: anchorsOf(s).map((a) => a.p.map(r)) }),
+    line: colorName(s.stroke),
+    ...(s.type === 'freehand' ? {} : { fill: colorName(s.fill) }),
+  };
+}
+
+/** The part of the canvas the user can see (not under the top bar or the chat panel), in canvas units. */
+function visibleArea(visibleLeft: number): Area {
+  const { view } = useStore.getState();
   const top = 48; // the top bar
-  const [x0, y0] = toWorld([visibleLeft, top], st.view);
-  const [x1, y1] = toWorld([window.innerWidth, window.innerHeight], st.view);
+  const [left, t] = toWorld([visibleLeft, top], view);
+  const [right, bottom] = toWorld([window.innerWidth, window.innerHeight], view);
+  return { left, top: t, right, bottom };
+}
+
+const rounded = (a: Area) => ({ left: r(a.left), top: r(a.top), right: r(a.right), bottom: r(a.bottom) });
+/** How many selected shapes the header describes in full when the shape list is left out. */
+const SELECTED_DETAIL = 20;
+
+/** The canvas at one moment, as the model will get it: header text, and what to picture. */
+export interface CanvasView {
+  /** The header (with the full shape list on small canvases), sent alongside the picture. */
+  text: string;
+  /** The header and the full shape list, for when no picture can be sent. Same as text on small canvases. */
+  textOnly: string;
+  area: Area;
+  shapes: Shape[];
+  pointer: Pt | null;
+}
+
+/**
+ * The canvas as the model sees it: a compact JSON header (the visible area, the pointer and the
+ * shape under it, the selection, the colors) to go with a picture of `area` (the visible area by
+ * default). Small canvases also list every shape.
+ */
+export function canvasView({ pointer, visibleLeft }: Pointing, area?: Area): CanvasView {
+  const st = useStore.getState();
+  const visible = visibleArea(visibleLeft);
+  const pictured = area ?? visible;
   const under = pointer && shapeAt(pointer);
-  return JSON.stringify({
-    visible_area: { left: r(x0), top: r(y0), right: r(x1), bottom: r(y1) },
-    pointer: pointer ? { x: r(pointer[0]), y: r(pointer[1]), over_shape: under ? alias(under) : null } : null,
-    selected: st.selectedIds.map(alias),
+  const underShape = under ? st.shapes.find((s) => s.id === under) : undefined;
+  const selected = st.shapes.filter((s) => st.selectedIds.includes(s.id));
+  const header = {
+    visible_area: rounded(visible),
+    ...(area ? { picture_area: rounded(area) } : {}),
+    grid_step: gridStep(pictured),
+    pointer: pointer ? { x: r(pointer[0]), y: r(pointer[1]), over_shape: underShape ? describe(underShape) : null } : null,
+    selected: aliasList(st.selectedIds),
     clipboard: st.clipboard ? st.clipboard.length : 0,
     default_colors: { line: colorName(st.currentColor), fill: colorName(st.currentFill) },
     color_keys: st.palette.map(colorName),
     saved_swatches: st.swatches,
-    shapes_back_to_front: st.shapes.map((s) => {
-      // A straight line is given by its end points, which say more than a box.
-      if (isLine(s)) {
-        const [[x1, y1], [x2, y2]] = s.points.map(toWorldFn(s));
-        return { id: alias(s.id), type: 'line', x1: r(x1), y1: r(y1), x2: r(x2), y2: r(y2), line: colorName(s.stroke) };
-      }
-      // Size is the shape's own width and height, before any rotation.
-      const f = frameOf(s);
-      return {
-        id: alias(s.id),
-        type: s.type,
-        x: r(f.cx),
-        y: r(f.cy),
-        width: r(f.w),
-        height: r(f.h),
-        ...(s.rotation ? { rotation: Math.round(s.rotation) } : {}),
-        // Exact corners, so a line can be drawn from or to one (in the shape's own order, clockwise).
-        ...(s.type === 'freehand' || s.type === 'circle' || s.type === 'ellipse' ? {} : { corners: anchorsOf(s).map((a) => a.p.map(r)) }),
-        line: colorName(s.stroke),
-        ...(s.type === 'freehand' ? {} : { fill: colorName(s.fill) }),
-      };
-    }),
+    shape_count: st.shapes.length,
+  };
+  const full = JSON.stringify({ ...header, ...textList(st.shapes, visible) });
+  const text =
+    st.shapes.length <= LIST_LIMIT
+      ? full
+      : JSON.stringify({
+          ...header,
+          ...(selected.length > 0 && selected.length <= SELECTED_DETAIL ? { selected_shapes: selected.map(describe) } : {}),
+          shapes_back_to_front: `not listed (${st.shapes.length} shapes); call find_shapes for exact geometry`,
+        });
+  return { text, textOnly: full, area: pictured, shapes: st.shapes, pointer };
+}
+
+/**
+ * A view and the text around it, ready to send: the picture is drawn only when `vision` is on, and
+ * the text-only form stands in when it isn't (or the picture failed).
+ */
+export async function withPicture(view: CanvasView, wrap: (canvas: string) => string, vision: boolean): Promise<WithPicture> {
+  const image = vision ? await renderPicture(view.area, view.shapes, view.pointer) : null;
+  return {
+    content: wrap(view.text),
+    ...(image ? { image } : {}),
+    ...(view.textOnly !== view.text || !image ? { textOnly: wrap(view.textOnly) } : {}),
+  };
+}
+
+/** The shape list for text-only views: every shape, or past TEXT_LIST_MAX, the frontmost ones on screen. */
+function textList(shapes: Shape[], visible: Area) {
+  if (shapes.length <= TEXT_LIST_MAX) return { shapes_back_to_front: shapes.map(describe) };
+  const onScreen = shapes.filter((s) => {
+    const b = worldBounds(s);
+    return b.maxX >= visible.left && b.minX <= visible.right && b.maxY >= visible.top && b.minY <= visible.bottom;
+  });
+  const listed = onScreen.slice(-TEXT_LIST_MAX);
+  return {
+    shapes_back_to_front: listed.map(describe),
+    shapes_not_listed: `${shapes.length - listed.length} (only the frontmost ${listed.length} on screen are listed); call find_shapes for others`,
+  };
+}
+
+/** A rectangle argument, with its sides in order and not too small to see. */
+function area(input: Record<string, unknown>, key: string): Area | undefined {
+  const v = input[key];
+  if (v === undefined || v === null) return undefined;
+  if (typeof v !== 'object') throw new InputError(`${key} must be an object with left, top, right and bottom`);
+  const o = v as Record<string, unknown>;
+  const left = number(o, 'left'), top = number(o, 'top'), right = number(o, 'right'), bottom = number(o, 'bottom');
+  if (right - left < MIN_SIZE || bottom - top < MIN_SIZE) throw new InputError(`${key} must have right > left and bottom > top`);
+  return { left, top, right, bottom };
+}
+
+function findShapes(input: Record<string, unknown>): string {
+  const st = useStore.getState();
+  let found = st.shapes;
+  if (input.ids !== undefined) {
+    if (!Array.isArray(input.ids)) throw new InputError('ids must be a list of shape ids');
+    const ids = new Set((input.ids as unknown[]).map((a) => idByAlias.get(String(a).trim()) ?? String(a)));
+    found = found.filter((s) => ids.has(s.id));
+  }
+  const where = area(input, 'area');
+  if (where) {
+    found = found.filter((s) => {
+      const b = worldBounds(s);
+      return b.maxX >= where.left && b.minX <= where.right && b.maxY >= where.top && b.minY <= where.bottom;
+    });
+  }
+  if (input.types !== undefined) {
+    if (!Array.isArray(input.types)) throw new InputError('types must be a list');
+    const types = new Set(input.types as string[]);
+    found = found.filter((s) => types.has(isLine(s) ? 'line' : s.type));
+  }
+  if (input.color !== undefined && input.color !== null) {
+    const c = color(input, 'color', { none: true });
+    found = found.filter((s) => s.stroke === c || (s.type !== 'freehand' && s.fill === c));
+  }
+  if (input.selected === true) found = found.filter((s) => st.selectedIds.includes(s.id));
+  const limit = Math.min(FIND_MAX, Math.max(1, Math.round(number(input, 'limit', true) ?? FIND_LIMIT)));
+  const shown = found.slice(0, limit);
+  return JSON.stringify({
+    matches: found.length,
+    ...(found.length > shown.length ? { note: `showing the first ${shown.length}; narrow the filters or raise limit for the rest` } : {}),
+    shapes_back_to_front: shown.map(describe),
   });
 }
 
@@ -400,7 +552,17 @@ export function beginToolRun() {
   workingSelection = useStore.getState().selectedIds;
 }
 
-export function runTool(name: string, input: Record<string, unknown>, pointing: Pointing): ToolOutcome {
+/**
+ * Runs a tool. The change itself happens at once; only drawing a requested picture waits, and by
+ * then the canvas it shows has been captured. `vision` is whether a picture is wanted at all.
+ */
+export async function runTool(name: string, input: Record<string, unknown>, pointing: Pointing, vision: boolean): Promise<WithPicture & { isError: boolean }> {
+  const out = runNow(name, input, pointing);
+  if (!out.view) return { content: out.result, isError: !!out.isError };
+  return { ...(await withPicture(out.view, (canvas) => canvas, vision)), isError: false };
+}
+
+function runNow(name: string, input: Record<string, unknown>, pointing: Pointing): ToolOutcome {
   const userSelection = useStore.getState().selectedIds;
   const alive = (ids: string[]) => {
     const { shapes } = useStore.getState();
@@ -423,8 +585,13 @@ function run(name: string, input: Record<string, unknown>, pointing: Pointing): 
   const selection = () => st.shapes.filter((s) => st.selectedIds.includes(s.id));
 
   switch (name) {
-    case 'get_canvas':
-      return { result: canvasState(pointing) };
+    case 'view_canvas': {
+      const view = canvasView(pointing, area(input, 'area'));
+      return { result: view.text, view };
+    }
+
+    case 'find_shapes':
+      return { result: findShapes(input) };
 
     case 'create_shapes': {
       const items = input.shapes;
