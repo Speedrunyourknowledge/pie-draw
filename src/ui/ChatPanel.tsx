@@ -153,7 +153,7 @@ function Conversation({ onLeave }: { onLeave: () => void }) {
 
   useEffect(() => inputRef.current?.focus(), [focusRequest]);
 
-  // Grow with the text, up to a few lines.
+  // Starts two lines tall (rows={2}) and grows with the text, up to a few lines.
   useLayoutEffect(() => {
     const el = inputRef.current!;
     el.style.height = 'auto';
@@ -243,7 +243,7 @@ function Conversation({ onLeave }: { onLeave: () => void }) {
         )}
         <textarea
           ref={inputRef}
-          rows={1}
+          rows={2}
           value={text}
           placeholder="Ask the assistant…"
           onChange={(e) => setText(e.target.value)}
