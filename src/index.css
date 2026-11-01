@@ -1325,7 +1325,9 @@ svg.canvas.aiming .selection * { pointer-events: none !important; }
 svg.canvas.aiming .shape .halo { display: none !important; }
 svg.canvas.aiming .shape:hover .halo { display: inline !important; --halo-color: var(--accent) !important; }
 
-/* Where "here" is while typing a message. */
+/* Where "here" is while typing a message. Two tones, like the cursors: a white casing under a blue
+   line, so one of them always contrasts with what's beneath (the blue on light fills and the page,
+   the white on dark or blue ones). Inverting the backdrop instead vanishes over mid-tones. */
 .here-marker {
   position: fixed;
   width: 24px;
@@ -1333,11 +1335,13 @@ svg.canvas.aiming .shape:hover .halo { display: inline !important; --halo-color:
   margin: -12px 0 0 -12px;
   pointer-events: none;
   z-index: 1;
-  fill: rgba(62, 99, 221, 0.12);
-  stroke: var(--accent);
-  stroke-width: 1.5;
+  overflow: visible; /* the casing's round caps reach just past the 24-unit box */
+  fill: none;
   stroke-linecap: round;
 }
+.here-marker .casing { stroke: #fff; stroke-width: 3; }
+.here-marker .ink { stroke: var(--accent); stroke-width: 1.5; }
+.here-marker .ink circle { fill: rgba(62, 99, 221, 0.12); }
 
 /* Where the pointer is while the system hides it after typing, until the mouse moves. */
 .pointer-hint {

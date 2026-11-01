@@ -505,10 +505,16 @@ function PointerMarker() {
   const view = useStore((s) => s.view);
   if (!pointer || !focused) return null;
   const [x, y] = toScreen(pointer, view);
-  return (
-    <svg className="here-marker" style={{ left: x, top: y }} viewBox="-12 -12 24 24" aria-hidden>
+  const mark = (
+    <>
       <circle r="7" />
       <path d="M0 -11 V-4 M0 4 V11 M-11 0 H-4 M4 0 H11" />
+    </>
+  );
+  return (
+    <svg className="here-marker" style={{ left: x, top: y }} viewBox="-12 -12 24 24" aria-hidden>
+      <g className="casing">{mark}</g>
+      <g className="ink">{mark}</g>
     </svg>
   );
 }
