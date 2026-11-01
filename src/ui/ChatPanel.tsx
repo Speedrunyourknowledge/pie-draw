@@ -28,12 +28,14 @@ export function ChatPanel() {
   const showSettings = editing || !isConfigured(settings);
 
   // Track where the pointer is on the canvas, so "here" means something when a message is sent.
+  // Off the canvas (on the way to the send button, say) the user isn't pointing at anything, so the
+  // spot where the mouse left doesn't count as "here", nor the shape there as "this".
   useEffect(() => {
     if (!open) return;
     const move = (e: PointerEvent) => {
       mouse.current = { x: e.clientX, y: e.clientY };
-      if (!(e.target as Element | null)?.closest?.('.canvas')) return;
-      useChat.getState().setPointer(toWorld([e.clientX, e.clientY], useStore.getState().view));
+      const onCanvas = (e.target as Element | null)?.closest?.('.canvas');
+      useChat.getState().setPointer(onCanvas ? toWorld([e.clientX, e.clientY], useStore.getState().view) : null);
     };
     window.addEventListener('pointermove', move);
     return () => window.removeEventListener('pointermove', move);

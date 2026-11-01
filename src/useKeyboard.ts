@@ -34,6 +34,10 @@ export function useKeyboard(onEscape: () => void, onMenuKey: (e: KeyboardEvent) 
         return;
       }
 
+      // With text highlighted (e.g. in a chat message), ⌘C / ⌘X copy that text as usual
+      // rather than the selected shapes.
+      if (mod && (key === 'c' || key === 'x') && !(window.getSelection()?.isCollapsed ?? true)) return;
+
       if (onMenuKey(e)) {
         e.preventDefault();
         return;

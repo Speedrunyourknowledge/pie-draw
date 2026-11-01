@@ -611,6 +611,8 @@ export function Canvas() {
     const additive = e.shiftKey || (isMac ? e.metaKey : e.ctrlKey);
     if (e.button > 2) return;
     e.currentTarget.setPointerCapture(e.pointerId);
+    // A press on the canvas drops any text highlighted in the chat, so ⌘C copies shapes again.
+    window.getSelection()?.removeAllRanges();
 
     // Middle button (hold the scroll wheel) or Space+drag pans, like a map. The hand tool does too,
     // once the press moves (see toolPress), so a hold can still open the menu.
