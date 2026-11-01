@@ -438,6 +438,15 @@ export function Canvas() {
     switch (action.kind) {
       case 'copy':
       case 'cut': {
+        // A slash started inside an unselected shape clears its fill (the topmost one there), like the
+        // color gestures fill it. Inside a selected shape the stroke would have been a drag.
+        const target = action.kind === 'cut' && st.shapes.findLast((s) => canFill(s) && !st.selectedIds.includes(s.id) && shapeNearPoint(s, points[0], 0));
+        if (target) {
+          st.refill(target.id, null);
+          st.showToast(`Fill: None · ${kbd('mod+z')} to undo`);
+          pulse(target.id);
+          return true;
+        }
         const n = st.selectedIds.length;
         const verb = action.kind === 'copy' ? 'Copy' : 'Cut';
         if (n === 0) {
