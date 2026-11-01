@@ -167,8 +167,8 @@ interface StatusInput {
 function statusText({ menu, rotation, movingEnd, lineSelected, line, mode, selectionCount, tool, createType, triStep }: StatusInput) {
   if (menu) return 'Select an option · Click the center or outside the menu to cancel';
   if (mode === 'scaling') return 'Hold Shift to keep proportions';
-  if (movingEnd) return 'Snaps to other line ends, shape corners, and 45° steps when close';
-  if (rotation !== null) return `${Math.round(normAngle(rotation))}° · Snaps to 45° steps when close · Double-click the handle to reset`;
+  if (movingEnd) return 'Snaps to other line endpoints and shape corners';
+  if (rotation !== null) return `Rotated ${Math.round(normAngle(rotation))}° · Double-click the handle to reset`;
   if (mode === 'selecting') return 'Every shape the box touches is selected · Release to finish';
   if (triStep === 'side') return 'Release to finish this side · Snaps to shape corners and 45° steps';
   if (triStep === 'corner') return 'Click to place the third corner · Snaps to right angles and equal sides · Press Esc to cancel';

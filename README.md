@@ -69,7 +69,7 @@ To skip the form, copy `.env.example` to `.env.local`, fill it in, and restart `
 - **Freehand drawing** with live shape recognition. If a stroke closes into a recognized shape, a **preview** of that shape appears. Release to snap to that shape.
 - **Straight lines.** Hold **Shift** partway through a freehand stroke and it becomes a straight line from where the stroke began. It snaps to horizontal, vertical and 45° when close. Let go of Shift to continue freehand.
 - **Connecting lines.** A selected line shows a handle at each end; drag one to reshape the line. Line ends snap onto other lines' ends and onto the corners of squares, rectangles and triangles (a ring marks the joint). Moving a shape or line snaps it the same way. Dragging from the end of an unselected line draws onward from that exact point.
-- **Object manipulation.** Select, move, scale, and rotate objects directly, by mouse, trackpad, or keyboard. The round handle above the selection box rotates. It snaps to 45° steps when close, and double-clicking it resets the angle. **R** / **Shift+R** turn the selection a quarter turn.
+- **Object manipulation.** Select, move, scale, and rotate objects.
 - **Multi-select.** Select several objects by clicking or with a selection box. A multi-selection acts as one object: moving, scaling, and recoloring affects all selected objects.
 - **Cut, copy, and paste**, **z-order** (To Front / To Back), an **eraser tool**, and **undo / redo**.
 

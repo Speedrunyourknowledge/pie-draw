@@ -50,7 +50,7 @@ export function GestureList() {
   return (
     <>
       <p>
-        With <b>gestures</b> enabled (top bar, or <Key>G</Key>), draw one of these in a single stroke. Each picture starts at
+        With <b>gestures</b> enabled (toolbar button, or <Key>G</Key>), you can draw to initiate actions. Each picture starts at
         the <span className="guide-start" aria-hidden /> green dot and follows the arrows. Turn gestures off to draw freely.
       </p>
 

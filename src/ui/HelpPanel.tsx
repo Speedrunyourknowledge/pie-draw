@@ -52,7 +52,7 @@ export function HelpPanel() {
         <section>
           <h3>Menu and Options</h3>
           <p>
-            <b>Right-click</b> or <b>left-press-and-hold</b> anywhere to open the menu or press <Key>M</Key>.
+            <b>Right-click</b> or <b>left-press-and-hold</b> to open the menu, or press <Key>M</Key>.
             The type of menu depends on what you have selected:
           </p>
           <div className="mini-pies">
@@ -70,10 +70,10 @@ export function HelpPanel() {
             <li>The <b>File</b> menu at the top allows you to save and open your drawings.</li>
             <li>
               <b>Assistant:</b> Click <b>Assistant</b> in the top bar (or press <Key>/</Key>) to interact with an AI assistant.
-              After typing, <b>point with the mouse</b> to indicate “here” or “this” (the shape “this” means glows blue), then press <b>Enter</b>.
+              After typing, <b>point with the mouse</b> to indicate “here” or “this”, then press <b>Enter</b>.
             </li>
             <li>
-              <b>Gestures:</b> With Gestures on (top bar, or <Key>G</Key>), single strokes create shapes, select, copy, paste, set colors and delete.{' '}
+              With <b>gestures</b> enabled (toolbar button, or <Key>G</Key>), you can draw to initiate actions.
               <button className="help-link" onClick={() => useStore.getState().setGestureGuideOpen(true)}>See all gestures →</button>
             </li>
           </ul>
@@ -83,19 +83,19 @@ export function HelpPanel() {
           <section>
             <h3>Draw and Edit</h3>
             <ul className="help-list">
-              <li><b>Choose a shape from the menu</b> and the pointer becomes a crosshair showing that shape. <b>Drag</b> to draw it (Shift keeps the sides equal), or <b>click</b> to place it at a default size. For triangles, drag to draw one side, then click to place the third corner.</li>
+              <li><b>Choose a shape from the menu</b>, then drag to draw it (Shift keeps the sides equal), or click to place it at a default size. For triangles, drag to draw one side, then click to place the third corner.</li>
               <li><b>Click and drag on empty space</b> to sketch. Sketch a shape and a faded preview will appear if the shape is recognized.</li>
               <li><b>Start sketching then hold Shift</b> to get a straight line.</li>
-              <li><b>Straight lines snap together.</b> Drag a selected line's endpoints to stretch it. Line endpoints snap to each other and to shape corners.</li>
-              <li><b>Click</b> a shape to select it, then <b>drag</b> to move it.</li>
-              <li><b>Drag a corner or edge</b> of the selection box to scale (Shift keeps proportions), or <b>pinch</b> on a trackpad.</li>
-              <li><b>Drag the round handle</b> above the selection box to rotate. It snaps to 45° increments. <b>Double-click</b> it to stand the shape upright again.</li>
+              <li><b>Select a straight line</b> then drag its endpoints to stretch it. Line endpoints snap to each other and to shape corners.</li>
+              <li><b>Select a shape</b> then drag to move it.</li>
+              <li><b>Drag a corner or edge of a shape</b> to scale it (Shift keeps proportions), or pinch on a trackpad.</li>
+              <li><b>Drag the round handle above a shape</b> to rotate it. Double-click it to make the shape upright again.</li>
             </ul>
-            <h3>Select Several Shapes</h3>
+            <h3>Select Multiple Shapes</h3>
             <ul className="help-list">
-              <li><b>{kbd('mod')}-click</b> (or <b>Shift-click</b>) shapes to add or remove them one at a time.</li>
-              <li><b>Shift-drag</b> a box, or turn on the <b>select tool</b> (lower right, or <Key>V</Key>) and drag. Every shape the box touches is selected when you let go.</li>
-              <li>The selected shapes then act as one object: <b>drag anywhere inside the box</b> to move them all, <b>right-click or left-press-and-hold inside it</b> for the menu, and drag its corners or edges to scale them together.</li>
+              <li><b>Shift-drag</b> or use the <b>select tool</b> (lower right, or <Key>V</Key>) to select multiple shapes.</li>
+              <li><b>{kbd('mod')}-click</b> (or <b>Shift-click</b>) a shape to add or remove it from the selection.</li>
+              <li>The selected shapes act as one object.</li>
             </ul>
             <h3>Color</h3>
             <ul className="help-list">
@@ -107,9 +107,12 @@ export function HelpPanel() {
             <h3>Move Around</h3>
             <ul className="help-list">
               <li><b>Hold the scroll wheel and drag</b> to pan the canvas.</li>
-              <li>No scroll wheel? Use the <b>hand tool</b> (lower right, or <Key>H</Key>), or hold <Key>Space</Key> and drag.</li>
-              <li><b>Scroll</b> or two-finger swipe also pans.</li>
-              <li><b>Pinch</b> or <Key>Ctrl+scroll</Key> zooms (when nothing is selected). Zoom buttons are in the lower right.</li>
+              <li>Alternatively, use the <b>hand tool</b> (lower right, or <Key>H</Key>), or hold <Key>Space</Key> and drag.</li>
+              <li>A two-finger swipe also pans.</li>
+            </ul>
+            <h3>Zoom</h3>
+            <ul className="help-list">
+              <li><b>Pinch</b> or <Key>Ctrl+scroll</Key> zooms (when nothing is selected). Zoom buttons are provided in the lower right.</li>
             </ul>
           </section>
           <section>
