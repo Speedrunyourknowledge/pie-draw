@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { hexToHsv, hsvToHex, normalizeHex } from './colors';
 import {
   anchorsOf,
+  snapTriangleTip,
   closestSnap,
   frameOf,
   isLine,
@@ -19,7 +20,7 @@ import {
   snapSegment,
   worldBounds,
 } from './geometry';
-import type { Shape } from './types';
+import type { Pt, Shape } from './types';
 
 const rect = (rotation = 0): Shape => ({ ...makePrimitive('rectangle', 0, 0, '#000000', null), rotation }); // 180×110
 
@@ -161,5 +162,25 @@ describe('colors', () => {
 
   it('round-trips through HSV', () => {
     for (const hex of ['#ff8800', '#1f2933', '#ffffff', '#000000', '#3e63dd']) expect(hsvToHex(hexToHsv(hex))).toBe(hex);
+  });
+});
+
+describe('snapTriangleTip', () => {
+  const a: Pt = [0, 0], b: Pt = [100, 0];
+  it('snaps onto a right angle at either end of the side', () => {
+    expect(snapTriangleTip(a, b, [4, 60], 10)).toEqual({ p: [0, 60], from: 'a' });
+    expect(snapTriangleTip(a, b, [97, -50], 10)).toEqual({ p: [100, -50], from: 'b' });
+  });
+  it('snaps onto equal sides through the middle', () => {
+    expect(snapTriangleTip(a, b, [53, 80], 10)).toEqual({ p: [50, 80], from: 'mid' });
+  });
+  it('leaves a point far from every guide alone', () => {
+    expect(snapTriangleTip(a, b, [25, 40], 10)).toEqual({ p: [25, 40], from: null });
+  });
+  it('works for a tilted side', () => {
+    const r = snapTriangleTip([0, 0], [60, 80], [-78.2, 62.4], 10); // 3 units along the side from (-80, 60), which is on the perpendicular at a
+    expect(r.from).toBe('a');
+    expect(r.p[0]).toBeCloseTo(-80);
+    expect(r.p[1]).toBeCloseTo(60);
   });
 });

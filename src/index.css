@@ -124,6 +124,8 @@ svg.canvas.eraser .shape.erase-target .halo, svg.canvas.eraser .shape.erase-targ
 .end-handle:hover .end-knob { fill: var(--accent); }
 /* Where a line's end or a shape's corner has snapped onto another line's end or corner. */
 .snap-ring { fill: rgba(62, 99, 221, 0.15); stroke: var(--accent); stroke-width: 1.5; pointer-events: none; }
+.tip-guide { fill: none; stroke: var(--accent); stroke-width: 1.5; pointer-events: none; }
+.tip-guide line { stroke-dasharray: 4 4; }
 .canvas.mode-rotating .rotate-knob { fill: var(--accent); }
 .canvas.mode-rotating .shape:hover .halo { display: none; }
 
@@ -1099,15 +1101,6 @@ svg.canvas .shape.drop-target .halo.closed { --halo-opacity: 0.95; }
 }
 .chat-msg.user + .chat-msg:not(.user) { margin-top: 4px; }
 .chat-msg.assistant { align-self: flex-start; max-width: 95%; }
-.chat-msg.action {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--muted);
-  font-size: 13px;
-  margin: -4px 0;
-}
-.chat-msg.action svg { width: 15px; height: 15px; color: #30a46c; stroke-width: 2; }
 .chat-msg.error { color: #c62a2f; font-size: 13px; }
 .chat-msg.thinking { display: flex; gap: 4px; padding: 6px 0; }
 .chat-msg.thinking i {
@@ -1157,7 +1150,9 @@ svg.canvas .shape.drop-target .halo.closed { --halo-opacity: 0.95; }
 }
 .chat-send svg { stroke-width: 2; }
 .chat-send:disabled { background: rgba(31, 41, 51, 0.12); cursor: default; }
-.chat-send.stop { background: var(--black); }
+.chat-send.stop { background: #d9484d; }
+.chat-send.stop:hover { background: #c53a3f; }
+.chat-send + .chat-send { margin-left: -4px; } /* stop and send now sit together as a pair */
 .chat-send.stop rect { fill: currentColor; stroke: none; }
 
 .chat-settings {

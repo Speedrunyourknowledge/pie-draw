@@ -180,7 +180,7 @@ export function ColorPicker({ kind }: { kind: Kind }) {
       {open &&
         options.map((c, i) => {
           const a = fanStart - (i * span) / (options.length - 1);
-          const key = c.value ? `${kind === 'fill' ? '⇧' : ''}${i + 1}` : kind === 'fill' ? '⇧0' : '';
+          const key = c.value ? `${kind === 'fill' ? '⇧' : ''}${i + 1}` : kind === 'fill' ? '⇧6' : '';
           const name = colorLabel(c.value);
           return (
             <button

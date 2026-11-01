@@ -158,11 +158,15 @@ function Conversation({ onLeave }: { onLeave: () => void }) {
     el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
   }, [text]);
 
+  // While a reply is running, sending interrupts it: the new message goes now, not after.
   const send = (msg = text) => {
-    if (busy || !msg.trim()) return;
-    void useChat.getState().send(msg);
+    if (!msg.trim()) return;
+    if (busy) useChat.getState().sendNow(msg);
+    else void useChat.getState().send(msg);
     setText('');
   };
+  const stop = () => useChat.getState().stop();
+  const hasText = !!text.trim();
 
   return (
     <>
@@ -188,9 +192,6 @@ function Conversation({ onLeave }: { onLeave: () => void }) {
         )}
         {log.map((item) => (
           <div key={item.id} className={`chat-msg ${item.kind}`}>
-            {item.kind === 'action' && (
-              <svg viewBox="0 0 20 20" aria-hidden><path d="M5 10.5 L8.5 14 L15 6.5" /></svg>
-            )}
             <span>{item.text}</span>
             {(item.kind === 'user' || item.kind === 'assistant') && <CopyButton text={item.text} />}
           </div>
@@ -223,12 +224,24 @@ function Conversation({ onLeave }: { onLeave: () => void }) {
             }
           }}
         />
-        {busy ? (
-          <button type="button" className="chat-send stop" onClick={() => useChat.getState().stop()} data-tip="Stop" data-tip-side="right" aria-label="Stop">
+        {/* Keyed, so React never turns the stop button into the send button under a click: the
+            click would then finish as a submit. Neither button submits; Enter and clicks go through send(). */}
+        {busy && (
+          <button key="stop" type="button" className="chat-send stop" onClick={stop} data-tip="Stop" data-tip-side="right" aria-label="Stop">
             <svg viewBox="0 0 20 20"><rect x="6" y="6" width="8" height="8" rx="1.5" /></svg>
           </button>
-        ) : (
-          <button type="submit" className="chat-send" disabled={!text.trim()} data-tip="Send (Enter)" data-tip-side="right" aria-label="Send">
+        )}
+        {(!busy || hasText) && (
+          <button
+            key="send"
+            type="button"
+            className="chat-send"
+            onClick={() => send()}
+            disabled={!hasText}
+            data-tip={busy ? 'Send now (Enter)' : 'Send (Enter)'}
+            data-tip-side="right"
+            aria-label={busy ? 'Send now' : 'Send'}
+          >
             <svg viewBox="0 0 20 20"><path d="M10 16 V4 M5 9 L10 4 L15 9" /></svg>
           </button>
         )}

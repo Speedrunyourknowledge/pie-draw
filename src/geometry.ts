@@ -1,4 +1,4 @@
-import type { Freehand, PrimitiveType, Pt, Shape, ShapeType, TransformPatch } from './types';
+import type { Freehand, PrimitiveType, Pt, Shape, ShapeType, TransformPatch, Triangle } from './types';
 
 export interface Bounds {
   minX: number;
@@ -368,6 +368,12 @@ export function makePrimitiveInBox(
   }
 }
 
+/** A triangle with its corners at these three canvas points, of any shape. */
+export function makeTriangle(worldPoints: [Pt, Pt, Pt], color: string, fill: string | null): Triangle {
+  const { cx, cy, local } = centerPoints(worldPoints);
+  return { ...base('triangle', cx, cy), ...paint(color, fill), type: 'triangle', points: local };
+}
+
 /** A freehand stroke; with `straight`, a line from the first point to the second. */
 export function makeFreehand(worldPoints: Pt[], color: string, straight = false): Freehand {
   const { cx, cy, local } = centerPoints(worldPoints);
@@ -558,6 +564,29 @@ export function lineWithEnds(s: Freehand, a: Pt, b: Pt): Freehand {
   const { cx, cy, local } = centerPoints([a, b]);
   return { ...s, x: cx, y: cy, scaleX: 1, scaleY: 1, rotation: 0, points: local };
 }
+
+/**
+ * Where a triangle's third corner goes, given the side a-b: onto a right angle at a or b, or onto the
+ * line through the middle of the side where the other two sides come out equal, when the point is
+ * within `tol` of one; else where it is. `from` is where the line it snapped to starts.
+ */
+export function snapTriangleTip(a: Pt, b: Pt, p: Pt, tol: number): { p: Pt; from: 'a' | 'b' | 'mid' | null } {
+  const len = dist(a, b);
+  if (len === 0) return { p, from: null };
+  const n: Pt = [-(b[1] - a[1]) / len, (b[0] - a[0]) / len]; // across the side
+  const mid: Pt = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  let best: { p: Pt; from: 'a' | 'b' | 'mid'; d: number } | null = null;
+  for (const [from, o] of [['a', a], ['b', b], ['mid', mid]] as const) {
+    const t = (p[0] - o[0]) * n[0] + (p[1] - o[1]) * n[1];
+    const q: Pt = [o[0] + n[0] * t, o[1] + n[1] * t];
+    const d = dist(p, q);
+    if (d <= tol && (!best || d < best.d)) best = { p: q, from, d };
+  }
+  return best ? { p: best.p, from: best.from } : { p, from: null };
+}
+
+/** Twice a triangle's area: zero when its corners are in a line. */
+export const triangleArea2 = ([a, b, c]: Pt[]) => Math.abs((b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1]));
 
 /** A point things can snap together at: a line's end (`end`), or a corner of a shape with corners. */
 export interface Anchor {

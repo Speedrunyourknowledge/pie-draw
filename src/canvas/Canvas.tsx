@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import simplify from 'simplify-js';
-import { STROKE_WIDTH, anchorsOf, canFill, closestSnap, dist, isLine, lineEnds, lineWithEnds, frameOf, groupBounds, groupFrame, inFrame, makeFreehand, makePrimitive, makePrimitiveInBox, mustScaleEvenly, normAngle, pointsBounds, rotateAbout, rotatePt, scaleAbout, shapeInLasso, shapeNearPoint, shapeTouchesRect, snapAngle, snapSegment, type Anchor, type Bounds, type Frame } from '../geometry';
+import { STROKE_WIDTH, anchorsOf, canFill, closestSnap, dist, isLine, lineEnds, lineWithEnds, makeTriangle, snapTriangleTip, triangleArea2, frameOf, groupBounds, groupFrame, inFrame, makeFreehand, makePrimitive, makePrimitiveInBox, mustScaleEvenly, normAngle, pointsBounds, rotateAbout, rotatePt, scaleAbout, shapeInLasso, shapeNearPoint, shapeTouchesRect, snapAngle, snapSegment, type Anchor, type Bounds, type Frame } from '../geometry';
 import { describeAction, gestureFor, type GestureAction } from '../gestures/gestureConfig';
 import { CUSP_SPAN_PX, SCRIBBLE_HIT_PX, isScribble } from '../gestures/heuristics';
 import { PieMenu } from '../interaction/PieMenu';
@@ -17,7 +17,7 @@ import {
 import { menuFor, type PieItem } from '../interaction/pieMenuConfig';
 import { GhostTracker, interpret, overshot, shapeFromRecognized, type Recognized } from '../interaction/recognize';
 import { useChat } from '../ai/chat';
-import { useStore, type Tool } from '../store';
+import { useStore, type Tool, type View } from '../store';
 import type { Freehand, PrimitiveType, Pt, Shape } from '../types';
 import { useKeyboard } from '../useKeyboard';
 import { isMac, isTextField, kbd } from '../platform';
@@ -32,6 +32,7 @@ const HOLD_MS = 300; // left-press-and-hold opens the menu
 const SAMPLE_PX = 3; // freehand sampling distance
 const MIN_SIZE = 6; // smallest on-screen size a shape can be scaled to
 const DOUBLE_CLICK_MS = 400; // two clicks on the rotate knob this close together reset the angle
+const MIN_SIDE_PX = 10; // a triangle's first side shorter than this on screen is dropped
 const SNAP_PX = 10; // a line's end this close (on screen) to another line's end or a corner joins it
 const ERASE_STEP = 4; // px between hit tests along a fast eraser drag, so thin lines aren't skipped
 
@@ -55,6 +56,7 @@ type Gesture =
   // frame: the selection box when the drag began; start: the pointer's angle about its middle then.
   | { kind: 'rotate'; shapes: Shape[]; frame: Frame; start: number; screen: Pt; moved: boolean }
   | { kind: 'create'; start: Pt; type: PrimitiveType; shape: Shape | null } // shape: as last drawn
+  | { kind: 'triSide'; a: Pt; b: Pt | null; targets: Anchor[] } // dragging a new triangle's first side
   | { kind: 'marquee'; start: Pt; base: string[] } // box selection; base: selection it adds to
   // check: pending frame. line: Shift is down, so the stroke is a straight line from its start to `last`.
   | { kind: 'draw'; points: Pt[]; check: number | null; tracker: GhostTracker; line: boolean; last: Pt }
@@ -144,6 +146,9 @@ function boxOf(a: Pt, b: Pt): Bounds {
   };
 }
 
+/** Where the create tool is in making a triangle: dragging its first side, or placing its third corner. */
+type TriStep = 'side' | 'corner' | null;
+
 interface StatusInput {
   menu: MenuState | null;
   rotation: number | null; // the selection box's angle while it is being turned
@@ -155,15 +160,21 @@ interface StatusInput {
   selectionCount: number;
   tool: Tool;
   createType: PrimitiveType;
+  triStep: TriStep;
 }
 
 /** One line of context-sensitive guidance, so the available actions are never a mystery. */
-function statusText({ menu, rotation, movingEnd, lineSelected, line, mode, selectionCount, tool, createType }: StatusInput) {
+function statusText({ menu, rotation, movingEnd, lineSelected, line, mode, selectionCount, tool, createType, triStep }: StatusInput) {
   if (menu) return 'Select an option · Click the center or outside the menu to cancel';
   if (mode === 'scaling') return 'Hold Shift to keep proportions';
   if (movingEnd) return 'Snaps to other line ends, shape corners, and 45° steps when close';
   if (rotation !== null) return `${Math.round(normAngle(rotation))}° · Snaps to 45° steps when close · Double-click the handle to reset`;
   if (mode === 'selecting') return 'Every shape the box touches is selected · Release to finish';
+  if (triStep === 'side') return 'Release to finish this side · Snaps to shape corners and 45° steps';
+  if (triStep === 'corner') return 'Click to place the third corner · Snaps to right angles and equal sides · Press Esc to cancel';
+  if (tool === 'create' && createType === 'triangle') {
+    return 'Drag to draw one side, then click to place the third corner · Click to place a default triangle · Press Esc to cancel';
+  }
   if (tool === 'create') {
     if (mode === 'drawing') return 'Release to finish · Hold Shift for equal sides';
     return `Drag to draw the ${createType} · Click to place one · Press Esc to cancel`;
@@ -182,6 +193,24 @@ function statusText({ menu, rotation, movingEnd, lineSelected, line, mode, selec
     return `Drag to move · Drag edges or corners to scale · Drag the round handle to rotate · Right-click for more options`;
   }
   return 'Right-click or left-press-and-hold for the menu · Drag to draw · Shift-drag to select';
+}
+
+const MARK_PX = 9; // size of the right-angle mark
+
+/** The dashed line a triangle's third corner snapped along, with a right-angle mark where it meets the side. */
+function TipGuide({ from, along, tip, right, view }: { from: Pt; along: Pt; tip: Pt; right: boolean; view: View }) {
+  const o = toScreen(from, view), t = toScreen(tip, view), s = toScreen(along, view);
+  const unit = (q: Pt): Pt => {
+    const d = Math.hypot(q[0] - o[0], q[1] - o[1]) || 1;
+    return [((q[0] - o[0]) / d) * MARK_PX, ((q[1] - o[1]) / d) * MARK_PX];
+  };
+  const u = unit(s), v = unit(t);
+  return (
+    <g className="tip-guide">
+      <line x1={o[0]} y1={o[1]} x2={t[0]} y2={t[1]} />
+      {right && <polyline points={`${o[0] + u[0]},${o[1] + u[1]} ${o[0] + u[0] + v[0]},${o[1] + u[1] + v[1]} ${o[0] + v[0]},${o[1] + v[1]}`} />}
+    </g>
+  );
 }
 
 export function Canvas() {
@@ -220,6 +249,12 @@ export function Canvas() {
   const [lineMode, setLineMode] = useState(false); // the stroke in progress is a straight line
   const [snapRings, setSnapRings] = useState<Pt[]>([]); // where a line's end or a corner has just snapped
   const [movingEnd, setMovingEnd] = useState(false); // a line's end is being dragged
+  // A triangle is made by dragging one side, then clicking where its third corner goes. Between the
+  // two, no gesture is running (so the view can still be panned and zoomed): the side waits here.
+  const triRef = useRef<{ a: Pt; b: Pt; targets: Anchor[] } | null>(null);
+  const [triStep, setTriStep] = useState<TriStep>(null);
+  // The line the third corner snapped along (from a side's end for a right angle, or its middle).
+  const [tipGuide, setTipGuide] = useState<{ from: Pt; along: Pt; tip: Pt; right: boolean } | null>(null);
 
   const selected = shapes.filter((s) => selectedIds.includes(s.id));
 
@@ -454,6 +489,48 @@ export function Canvas() {
     pulse(shape.id);
   };
 
+  // ---- triangles ----
+
+  const cancelTriangle = () => {
+    triRef.current = null;
+    setTriStep(null);
+    setTipGuide(null);
+    setSnapRings([]);
+    setDraft(null);
+  };
+
+  /**
+   * The triangle with its third corner at (or snapped near) `w`: onto another shape's corner or a
+   * line's end, else onto a right angle at either end of the side or the line of equal sides.
+   */
+  const triangleTo = (w: Pt) => {
+    const { a, b, targets } = triRef.current!;
+    const st = useStore.getState();
+    const onAnchor = placeEnd(w, null, targets);
+    const snap = onAnchor.snapped ? { p: onAnchor.p, from: null } : snapTriangleTip(a, b, w, SNAP_PX / st.view.zoom);
+    const corners: Pt[] = [a, b, snap.p];
+    const mid: Pt = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    setSnapRings(onAnchor.snapped ? [snap.p] : []);
+    setTipGuide(
+      snap.from === 'a' ? { from: a, along: b, tip: snap.p, right: true }
+      : snap.from === 'b' ? { from: b, along: a, tip: snap.p, right: true }
+      : snap.from === 'mid' ? { from: mid, along: b, tip: snap.p, right: false }
+      : null,
+    );
+    // Too flat to be a triangle: the third corner is (nearly) on the side's line.
+    const flat = triangleArea2(corners) < (dist(a, b) * MIN_SIZE) / st.view.zoom;
+    return { shape: makeTriangle(corners as [Pt, Pt, Pt], st.currentColor, st.currentFill), flat };
+  };
+
+  // Switching tools (or to another shape) drops a triangle waiting for its third corner.
+  useEffect(
+    () =>
+      useStore.subscribe((st) => {
+        if (triRef.current && (st.tool !== 'create' || st.createType !== 'triangle')) cancelTriangle();
+      }),
+    [],
+  );
+
   // ---- eraser ----
 
   /** Erases the shape under a viewport point; the first erase of a drag records one undo step. */
@@ -531,6 +608,20 @@ export function Canvas() {
     if (e.button === 1 || (spacePan && !menuRef.current)) {
       gesture.current = { kind: 'pan', last: p };
       setPanning(true);
+      return;
+    }
+
+    // The click that places a triangle's third corner; a right-click drops the triangle instead.
+    if (triRef.current) {
+      if (right) cancelTriangle();
+      else {
+        const { shape, flat } = triangleTo(w);
+        if (!flat) {
+          cancelTriangle();
+          placeShape(shape);
+        }
+      }
+      gesture.current = { kind: 'swallow' };
       return;
     }
 
@@ -664,6 +755,12 @@ export function Canvas() {
         return;
       }
       case 'none':
+        if (triRef.current) {
+          const { shape, flat } = triangleTo(w);
+          const { a, b } = triRef.current;
+          setDraft(flat ? makeFreehand([a, b], st.currentColor, true) : shape);
+          return;
+        }
         setShiftHeld(e.shiftKey); // catches Shift pressed while the window was out of focus
         if (menuRef.current?.sticky) trackMenu(p); // click mode follows the hovering pointer
         else setEraseTargetId(st.tool === 'eraser' && !spaceRef.current ? shapeIdAt(e.clientX, e.clientY) : null);
@@ -675,7 +772,12 @@ export function Canvas() {
         if (dist(p, g.screen) < MOVE_THRESHOLD) return;
         clearTimer();
         if (g.tool === 'eraser') startErase(g.client.x, g.client.y);
-        else if (g.tool === 'create') {
+        else if (g.tool === 'create' && st.createType === 'triangle') {
+          const targets = anchorsExcept([]);
+          gesture.current = { kind: 'triSide', a: placeEnd(g.start, null, targets).p, b: null, targets };
+          st.setMode('drawing');
+          setTriStep('side');
+        } else if (g.tool === 'create') {
           gesture.current = { kind: 'create', start: g.start, type: st.createType, shape: null };
           st.setMode('drawing');
         } else {
@@ -759,6 +861,14 @@ export function Canvas() {
         setTurning({ ...f, angle });
         return;
       }
+      case 'triSide': {
+        // Like drawing a straight line: the end snaps to corners and line ends, else to 45° steps.
+        const q = placeEnd(w, g.a, g.targets);
+        g.b = q.p;
+        setDraft(makeFreehand([g.a, q.p], st.currentColor, true));
+        setSnapRings(q.snapped ? [q.p] : []);
+        return;
+      }
       case 'create':
         // The press point stays put as one corner; the pointer drags the opposite one.
         g.shape = makePrimitiveInBox(g.type, g.start, w, st.currentColor, st.currentFill, e.shiftKey, MIN_SIZE / st.view.zoom);
@@ -821,6 +931,14 @@ export function Canvas() {
       case 'create':
         if (g.shape) placeShape(g.shape);
         break;
+      case 'triSide':
+        setSnapRings([]);
+        // A side long enough to build on waits for its third corner; a scrap of one is dropped.
+        if (g.b && dist(g.a, g.b) * useStore.getState().view.zoom >= MIN_SIDE_PX) {
+          triRef.current = { a: g.a, b: g.b, targets: g.targets };
+          setTriStep('corner');
+        } else cancelTriangle();
+        break;
       case 'marquee':
         setMarquee(null);
         break;
@@ -859,6 +977,7 @@ export function Canvas() {
     setLineMode(false);
     setSnapRings([]);
     setMovingEnd(false);
+    cancelTriangle();
     closeMenu();
   };
 
@@ -868,10 +987,10 @@ export function Canvas() {
     useCallback(() => {
       const st = useStore.getState();
       if (menuRef.current) closeMenu();
-      else if (gesture.current.kind === 'create') {
-        // Esc mid-drag drops the shape being drawn and leaves the create tool.
-        gesture.current = { kind: 'swallow' };
-        setDraft(null);
+      else if (gesture.current.kind === 'create' || gesture.current.kind === 'triSide' || triRef.current) {
+        // Esc mid-drag (or before a triangle's third corner) drops the shape being drawn and leaves the create tool.
+        if (gesture.current.kind !== 'none') gesture.current = { kind: 'swallow' };
+        cancelTriangle();
         st.setMode('idle');
         st.setTool('draw');
       }
@@ -1033,6 +1152,7 @@ export function Canvas() {
           const [x, y] = toScreen(q, view);
           return <circle key={i} className="snap-ring" cx={x} cy={y} r={8} />;
         })}
+        {tipGuide && <TipGuide {...tipGuide} view={view} />}
         {lassoHits && lassoHits.length > 0 && <SelectionHandles shapes={lassoHits} view={view} preview />}
         {marquee && (() => {
           const [x0, y0] = toScreen([marquee.minX, marquee.minY], view);
@@ -1061,7 +1181,7 @@ export function Canvas() {
         </div>
       )}
       <div className="status">
-        {statusText({ menu, rotation: turning?.angle ?? null, movingEnd, lineSelected: selected.length === 1 && isLine(selected[0]), line: lineMode, spaceHeld: spaceHeld || panning, mode, selectionCount: selected.length, tool, createType })}
+        {statusText({ menu, rotation: turning?.angle ?? null, movingEnd, lineSelected: selected.length === 1 && isLine(selected[0]), line: lineMode, spaceHeld: spaceHeld || panning, mode, selectionCount: selected.length, tool, createType, triStep })}
       </div>
     </>
   );

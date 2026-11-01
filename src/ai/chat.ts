@@ -1,16 +1,15 @@
 import { create } from 'zustand';
-import { useStore } from '../store';
 import type { Pt } from '../types';
 import { DEFAULT_MODEL, describeError, step, type AiSettings, type Provider, type Turn } from './providers';
 import { SYSTEM_PROMPT } from './prompt';
-import { TOOLS, canvasState, runTool, type Pointing } from './tools';
+import { TOOLS, beginToolRun, canvasState, runTool, type Pointing } from './tools';
 
 const SETTINGS_KEY = 'pie-draw:ai';
-const MAX_STEPS = 16; // model calls per message, so a confused model can't loop forever
+const MAX_STEPS = 30; // model calls per message (a scene takes a few dozen batches at most), so a confused model can't loop forever
 
 export interface LogItem {
   id: number;
-  kind: 'user' | 'assistant' | 'action' | 'error';
+  kind: 'user' | 'assistant' | 'error';
   text: string;
 }
 
@@ -60,6 +59,8 @@ interface ChatState {
 
   setOpen: (open: boolean, focus?: boolean) => void;
   send: (text: string) => Promise<void>;
+  /** Stops the reply in progress and sends this message instead. */
+  sendNow: (text: string) => void;
   stop: () => void;
   clear: () => void;
   saveSettings: (settings: AiSettings) => void;
@@ -78,6 +79,15 @@ export const useChat = create<ChatState>()((set, get) => {
   const dropUnanswered = () =>
     set((st) => (st.turns.at(-1)?.role === 'user' ? { turns: st.turns.slice(0, -1) } : {}));
   const pointing = (): Pointing => ({ pointer: get().pointer, visibleLeft: get().visibleLeft });
+  /** Ends the reply in progress, noting it in the log as `note`. */
+  const abort = (note: string) => {
+    if (!controller) return;
+    controller.abort();
+    controller = null;
+    dropUnanswered();
+    log('error', note);
+    set({ busy: false });
+  };
 
   return {
     open: false,
@@ -104,6 +114,7 @@ export const useChat = create<ChatState>()((set, get) => {
       controller = new AbortController();
       const { signal } = controller;
       set({ busy: true });
+      beginToolRun();
       let usedTools = false;
       try {
         for (let i = 0; i < MAX_STEPS; i++) {
@@ -114,15 +125,15 @@ export const useChat = create<ChatState>()((set, get) => {
           if (res.stop === 'refused') log('error', 'The model declined this request.');
           if (res.stop === 'truncated') log('error', 'The reply was cut off.');
           if (res.stop !== 'tools') {
-            // Ending a turn after tool use without words is fine; ending with nothing shown at all is not.
-            if (get().log.length === logStart) log('error', 'The model didn’t respond.');
+            // Tool use isn't listed (the user sees the canvas change), so a reply that only acted is
+            // fine; one that neither acted nor said anything is not.
+            if (!usedTools && get().log.length === logStart) log('error', 'The model didn’t respond.');
             return;
           }
           // Run in order: later calls often depend on the selection earlier ones made.
           usedTools = true;
           const results = res.calls.map((c) => {
             const out = runTool(c.name, c.input, pointing());
-            if (out.summary && !out.isError) log('action', out.summary);
             return { id: c.id, content: out.result, isError: !!out.isError };
           });
           pushTurn({ role: 'tool', results });
@@ -133,22 +144,21 @@ export const useChat = create<ChatState>()((set, get) => {
         log('error', describeError(e));
         dropUnanswered();
       } finally {
-        if (controller?.signal === signal) controller = null;
-        // The tools select what they work on; that is their means, not the result, so it is let go
-        // once the reply ends. A reply that only talks leaves the user's selection alone.
-        if (usedTools) useStore.getState().select(null);
-        set({ busy: false });
+        // A stopped reply has already handed over; it mustn't mark a newer one as done.
+        if (controller?.signal === signal) {
+          controller = null;
+          set({ busy: false });
+        }
       }
     },
 
-    stop: () => {
-      if (!controller) return;
-      controller.abort();
-      controller = null;
-      dropUnanswered();
-      log('error', 'Stopped.');
-      set({ busy: false });
+    sendNow: (text) => {
+      if (!text.trim()) return;
+      abort('Interrupted.');
+      void get().send(text);
     },
+
+    stop: () => abort('Stopped.'),
 
     clear: () => {
       get().stop();

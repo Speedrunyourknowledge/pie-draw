@@ -1,5 +1,5 @@
 import { MAX_SWATCHES, colorLabel, normalizeHex } from '../colors';
-import { anchorsOf, dist, frameOf, isLine, groupFrame, makeFreehand, makePrimitive, makePrimitiveInBox, mustScaleEvenly, normAngle, scaleAbout, toWorldFn } from '../geometry';
+import { anchorsOf, dist, frameOf, isLine, groupFrame, makeFreehand, makePrimitive, makePrimitiveInBox, makeTriangle, mustScaleEvenly, normAngle, scaleAbout, toWorldFn } from '../geometry';
 import { useStore } from '../store';
 import { PALETTE, type PrimitiveType, type Pt, type Shape } from '../types';
 import { fitToContent, resetZoom, toScreen, toWorld, zoomIn, zoomOut } from '../view';
@@ -15,10 +15,8 @@ export interface ToolSpec {
 }
 
 export interface ToolOutcome {
-  /** Sent back to the model. */
+  /** Sent back to the model. The chat doesn't show tool use: the user watches the canvas change. */
   result: string;
-  /** Shown in the chat; omitted for read-only tools. */
-  summary?: string;
   isError?: boolean;
 }
 
@@ -27,6 +25,7 @@ const COLOR_HELP = `A hex color such as #ff8800 (any color), or one of the names
 const SHAPES: PrimitiveType[] = ['square', 'rectangle', 'circle', 'ellipse', 'triangle'];
 const MIN_SIZE = 6; // same floor as scaling on the canvas
 const MAX_SIZE = 5000;
+const MAX_BATCH = 200;
 
 const num = { type: 'number' };
 const colorParam = (what: string) => ({ type: 'string', description: `${what} ${COLOR_HELP}` });
@@ -38,30 +37,44 @@ export const TOOLS: ToolSpec[] = [
     parameters: { type: 'object', properties: {} },
   },
   {
-    name: 'create_shape',
-    description: 'Creates a shape centered on (x, y) and selects it. Leave out width/height for the default size, and colors to use the current default colors.',
+    name: 'create_shapes',
+    description: `Creates up to ${MAX_BATCH} shapes in one step (one undo step) and selects them. Use one call for a whole group or scene layer rather than one call per shape. Shapes are stacked in list order, later ones in front. If any item is invalid, nothing is created.`,
     parameters: {
       type: 'object',
       properties: {
-        type: { type: 'string', enum: SHAPES },
-        x: num,
-        y: num,
-        width: { ...num, description: 'Squares and circles use the larger of width and height for both.' },
-        height: num,
-        rotation: { ...num, description: 'Degrees clockwise. Width and height are measured before turning.' },
-        line_color: colorParam('Outline color.'),
-        fill_color: colorParam('Fill color, or none.'),
+        shapes: {
+          type: 'array',
+          maxItems: MAX_BATCH,
+          items: {
+            type: 'object',
+            properties: {
+              type: { type: 'string', enum: [...SHAPES, 'line'] },
+              x: { ...num, description: 'Center. Not for lines or triangles given by points.' },
+              y: num,
+              width: { ...num, description: 'Leave out width and height for the default size. Squares and circles use the larger of the two for both.' },
+              height: num,
+              rotation: { ...num, description: 'Degrees clockwise. Width and height are measured before turning.' },
+              points: {
+                type: 'array',
+                items: { type: 'array', items: num, minItems: 2, maxItems: 2 },
+                minItems: 3,
+                maxItems: 3,
+                description: 'Triangles only: the three corners as [x, y], making a triangle of any shape. Replaces x, y, width, height and rotation.',
+              },
+              x1: { ...num, description: 'Lines only: the two end points (x1, y1) and (x2, y2).' },
+              y1: num,
+              x2: num,
+              y2: num,
+              line_color: colorParam('Outline color (for a line, its color). For a shape with no visible outline, use its fill color.'),
+              fill_color: colorParam('Fill color, or none.'),
+            },
+            required: ['type'],
+          },
+        },
+        line_color: colorParam('Default outline color for items that leave it out.'),
+        fill_color: colorParam('Default fill color for items that leave it out.'),
       },
-      required: ['type', 'x', 'y'],
-    },
-  },
-  {
-    name: 'draw_line',
-    description: 'Draws a straight line from (x1, y1) to (x2, y2) and selects it. Use it for dividers, arrows (a shaft plus two short head lines), connectors, and outlines of shapes there is no primitive for.',
-    parameters: {
-      type: 'object',
-      properties: { x1: num, y1: num, x2: num, y2: num, color: colorParam('Line color.') },
-      required: ['x1', 'y1', 'x2', 'y2'],
+      required: ['shapes'],
     },
   },
   {
@@ -173,6 +186,37 @@ export const TOOLS: ToolSpec[] = [
   },
 ];
 
+// ---- short ids for the model ----
+// Shape ids are UUIDs; the model sees short aliases (s1, s2, ...) instead, which cost far fewer tokens
+// in a canvas of hundreds of shapes. An alias stays with its shape for the session (through undo too).
+
+const aliasById = new Map<string, string>();
+const idByAlias = new Map<string, string>();
+let nextAlias = 1;
+
+function alias(id: string): string {
+  let a = aliasById.get(id);
+  if (!a) {
+    a = `s${nextAlias++}`;
+    aliasById.set(id, a);
+    idByAlias.set(a, id);
+  }
+  return a;
+}
+
+/** Aliases as compactly as possible: consecutive runs as ranges ("s4-s9, s12"). */
+function aliasList(ids: string[]): string {
+  const nums = ids.map((id) => Number(alias(id).slice(1)));
+  const parts: string[] = [];
+  for (let i = 0; i < nums.length; ) {
+    let j = i;
+    while (j + 1 < nums.length && nums[j + 1] === nums[j] + 1) j++;
+    parts.push(j > i ? `s${nums[i]}-s${nums[j]}` : `s${nums[i]}`);
+    i = j + 1;
+  }
+  return parts.join(', ');
+}
+
 // ---- canvas state for the model ----
 
 const r = (n: number) => Math.round(n);
@@ -211,8 +255,8 @@ export function canvasState({ pointer, visibleLeft }: Pointing): string {
   const under = pointer && shapeAt(pointer);
   return JSON.stringify({
     visible_area: { left: r(x0), top: r(y0), right: r(x1), bottom: r(y1) },
-    pointer: pointer ? { x: r(pointer[0]), y: r(pointer[1]), over_shape: under || null } : null,
-    selected: st.selectedIds,
+    pointer: pointer ? { x: r(pointer[0]), y: r(pointer[1]), over_shape: under ? alias(under) : null } : null,
+    selected: st.selectedIds.map(alias),
     clipboard: st.clipboard ? st.clipboard.length : 0,
     default_colors: { line: colorName(st.currentColor), fill: colorName(st.currentFill) },
     color_keys: st.palette.map(colorName),
@@ -221,12 +265,12 @@ export function canvasState({ pointer, visibleLeft }: Pointing): string {
       // A straight line is given by its end points, which say more than a box.
       if (isLine(s)) {
         const [[x1, y1], [x2, y2]] = s.points.map(toWorldFn(s));
-        return { id: s.id, type: 'line', x1: r(x1), y1: r(y1), x2: r(x2), y2: r(y2), line: colorName(s.stroke) };
+        return { id: alias(s.id), type: 'line', x1: r(x1), y1: r(y1), x2: r(x2), y2: r(y2), line: colorName(s.stroke) };
       }
       // Size is the shape's own width and height, before any rotation.
       const f = frameOf(s);
       return {
-        id: s.id,
+        id: alias(s.id),
         type: s.type,
         x: r(f.cx),
         y: r(f.cy),
@@ -292,12 +336,85 @@ const needSelection = () => {
   if (useStore.getState().selectedIds.length === 0) throw new InputError('Nothing is selected. Select shapes first.');
 };
 
+/** Colors that items of a create_shapes call fall back on. */
+interface Defaults {
+  line: string;
+  fill: string | null;
+}
+
+/** One create_shapes item as a shape, or an InputError saying what is wrong with it. */
+function buildShape(item: Record<string, unknown>, defaults: Defaults): Shape {
+  const type = oneOf(item, 'type', [...SHAPES, 'line'] as const)!;
+  const lineValue = color(item, 'line_color', { optional: true }) ?? defaults.line;
+  const sizeOk = (w: number, h: number) => {
+    if (Math.max(w, h) > MAX_SIZE) throw new InputError(`${type} can be at most ${MAX_SIZE} units across`);
+  };
+
+  if (type === 'line') {
+    const a: Pt = [number(item, 'x1'), number(item, 'y1')];
+    const b: Pt = [number(item, 'x2'), number(item, 'y2')];
+    if (dist(a, b) < MIN_SIZE) throw new InputError(`a line must be at least ${MIN_SIZE} units long`);
+    sizeOk(Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]));
+    return makeFreehand([a, b], lineValue, true);
+  }
+
+  const fill = color(item, 'fill_color', { optional: true, none: true });
+  const fillValue = fill === undefined ? defaults.fill : fill;
+  let shape: Shape;
+
+  if (item.points !== undefined) {
+    if (type !== 'triangle') throw new InputError('points is only for triangles');
+    const pts = item.points;
+    if (!Array.isArray(pts) || pts.length !== 3 || pts.some((p) => !Array.isArray(p) || p.length !== 2 || p.some((v) => typeof v !== 'number' || !Number.isFinite(v))))
+      throw new InputError('points must be three [x, y] pairs');
+    const [a, b, c] = pts as [Pt, Pt, Pt];
+    const area = Math.abs((b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])) / 2;
+    if (area < MIN_SIZE * MIN_SIZE / 2) throw new InputError('the triangle is too small or its corners are in a line');
+    const xs = [a[0], b[0], c[0]], ys = [a[1], b[1], c[1]];
+    sizeOk(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+    shape = makeTriangle([a, b, c], lineValue, fillValue);
+  } else {
+    const x = number(item, 'x'), y = number(item, 'y');
+    const w = number(item, 'width', true), h = number(item, 'height', true);
+    if (w === undefined && h === undefined) shape = makePrimitive(type, x, y, lineValue, fillValue);
+    else {
+      // Same as dragging out a box with the create tool: a missing side matches the given one.
+      const clamp = (v: number) => Math.min(MAX_SIZE, Math.max(MIN_SIZE, v));
+      const bw = clamp(w ?? h!), bh = clamp(h ?? w!);
+      shape = makePrimitiveInBox(type, [x - bw / 2, y - bh / 2], [x + bw / 2, y + bh / 2], lineValue, fillValue);
+    }
+    shape.rotation = normAngle(number(item, 'rotation', true) ?? 0); // centered on (x, y), so it turns in place
+  }
+  return shape;
+}
+
+/**
+ * The assistant's own selection. Its tools act on "the selection" like the app's actions do, but the
+ * user should only ever see what they selected themselves, so each tool runs with this swapped into
+ * the store and the user's selection put back before anything renders (all synchronously).
+ */
+let workingSelection: string[] = [];
+
+/** Starts a reply's working selection from what the user has selected, so "this" works without reselecting. */
+export function beginToolRun() {
+  workingSelection = useStore.getState().selectedIds;
+}
+
 export function runTool(name: string, input: Record<string, unknown>, pointing: Pointing): ToolOutcome {
+  const userSelection = useStore.getState().selectedIds;
+  const alive = (ids: string[]) => {
+    const { shapes } = useStore.getState();
+    return ids.filter((id) => shapes.some((s) => s.id === id));
+  };
+  useStore.setState({ selectedIds: alive(workingSelection) });
   try {
     return run(name, input, pointing);
   } catch (e) {
     if (e instanceof InputError) return { result: e.message, isError: true };
     throw e;
+  } finally {
+    workingSelection = useStore.getState().selectedIds;
+    useStore.setState({ selectedIds: alive(userSelection) });
   }
 }
 
@@ -309,59 +426,45 @@ function run(name: string, input: Record<string, unknown>, pointing: Pointing): 
     case 'get_canvas':
       return { result: canvasState(pointing) };
 
-    case 'create_shape': {
-      const type = oneOf(input, 'type', SHAPES)!;
-      const x = number(input, 'x'), y = number(input, 'y');
-      const w = number(input, 'width', true), h = number(input, 'height', true);
-      const rotation = number(input, 'rotation', true) ?? 0;
-      const lineColor = color(input, 'line_color', { optional: true }) ?? st.currentColor;
+    case 'create_shapes': {
+      const items = input.shapes;
+      if (!Array.isArray(items) || items.length === 0) throw new InputError('shapes must be a non-empty list');
+      if (items.length > MAX_BATCH) throw new InputError(`At most ${MAX_BATCH} shapes per call; split the rest into more calls`);
       const fill = color(input, 'fill_color', { optional: true, none: true });
-      const fillValue = fill === undefined ? st.currentFill : fill;
-      let shape: Shape;
-      if (w === undefined && h === undefined) shape = makePrimitive(type, x, y, lineColor, fillValue);
-      else {
-        // Same as dragging out a box with the create tool: a missing side matches the given one.
-        const clamp = (v: number) => Math.min(MAX_SIZE, Math.max(MIN_SIZE, v));
-        const bw = clamp(w ?? h!), bh = clamp(h ?? w!);
-        shape = makePrimitiveInBox(type, [x - bw / 2, y - bh / 2], [x + bw / 2, y + bh / 2], lineColor, fillValue);
-      }
-      shape.rotation = normAngle(rotation); // primitives are centered on (x, y), so they turn in place
-      st.addShape(shape);
-      return { result: `Created ${type} ${shape.id}`, summary: `Created a ${type}` };
-    }
-
-    case 'draw_line': {
-      const a: Pt = [number(input, 'x1'), number(input, 'y1')];
-      const b: Pt = [number(input, 'x2'), number(input, 'y2')];
-      if (dist(a, b) < MIN_SIZE) throw new InputError(`The line must be at least ${MIN_SIZE} units long`);
-      if (dist(a, b) > MAX_SIZE) throw new InputError(`The line can be at most ${MAX_SIZE} units long`);
-      const line = makeFreehand([a, b], color(input, 'color', { optional: true }) ?? st.currentColor, true);
-      st.addShape(line);
-      return { result: `Drew line ${line.id}`, summary: 'Drew a line' };
+      const defaults: Defaults = { line: color(input, 'line_color', { optional: true }) ?? st.currentColor, fill: fill === undefined ? st.currentFill : fill };
+      const shapes = items.map((item, i) => {
+        if (typeof item !== 'object' || item === null) throw new InputError(`shapes[${i}] must be an object`);
+        try {
+          return buildShape(item as Record<string, unknown>, defaults);
+        } catch (e) {
+          if (e instanceof InputError) throw new InputError(`shapes[${i}]: ${e.message}. Nothing was created.`);
+          throw e;
+        }
+      });
+      st.addShapes(shapes);
+      return { result: `Created ${plural(shapes.length, 'shape')}: ${aliasList(shapes.map((s) => s.id))}` };
     }
 
     case 'select_shapes': {
-      const ids = input.ids;
-      if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string')) throw new InputError('ids must be a list of shape ids');
-      const unknown = ids.filter((id) => !st.shapes.some((s) => s.id === id));
+      const given = input.ids;
+      if (!Array.isArray(given) || given.some((id) => typeof id !== 'string')) throw new InputError('ids must be a list of shape ids');
+      const ids = (given as string[]).map((a) => idByAlias.get(a.trim()) ?? a);
+      const unknown = (given as string[]).filter((_, i) => !st.shapes.some((s) => s.id === ids[i]));
       if (unknown.length > 0) throw new InputError(`No shape with id ${unknown.join(', ')}`);
       const next = input.add === true ? [...new Set([...st.selectedIds, ...ids])] : ids;
       st.setSelection(next);
-      return {
-        result: `Selected: ${JSON.stringify(next)}`,
-        summary: next.length === 0 ? 'Cleared the selection' : `Selected ${plural(next.length, 'shape')}`,
-      };
+      return { result: next.length === 0 ? 'Cleared the selection' : `Selected ${aliasList(next)}` };
     }
 
     case 'select_all':
       st.selectAll();
-      return { result: `Selected all ${st.shapes.length} shapes`, summary: 'Selected all shapes' };
+      return { result: `Selected all ${st.shapes.length} shapes` };
 
     case 'move_selection': {
       needSelection();
       const dx = number(input, 'dx'), dy = number(input, 'dy');
       st.nudge(dx, dy);
-      return { result: `Moved ${plural(st.selectedIds.length, 'shape')} by (${r(dx)}, ${r(dy)})`, summary: `Moved ${plural(st.selectedIds.length, 'shape')}` };
+      return { result: `Moved ${plural(st.selectedIds.length, 'shape')} by (${r(dx)}, ${r(dy)})` };
     }
 
     case 'scale_selection': {
@@ -379,7 +482,7 @@ function run(name: string, input: Record<string, unknown>, pointing: Pointing): 
       st.checkpoint();
       st.updateShapes(scaleAbout(sel, f.cx, f.cy, kx, ky, f.angle));
       const by = kx === ky ? `${+kx.toFixed(2)}×` : `${+kx.toFixed(2)}× wide, ${+ky.toFixed(2)}× tall`;
-      return { result: `Scaled ${plural(sel.length, 'shape')} by ${by}`, summary: `Scaled ${plural(sel.length, 'shape')} ${by}` };
+      return { result: `Scaled ${plural(sel.length, 'shape')} by ${by}` };
     }
 
     case 'rotate_selection': {
@@ -388,40 +491,40 @@ function run(name: string, input: Record<string, unknown>, pointing: Pointing): 
       const n = st.selectedIds.length;
       if (input.absolute === true) {
         st.setRotation(normAngle(deg));
-        return { result: `Set ${plural(n, 'shape')} to ${Math.round(normAngle(deg))}°`, summary: `Rotated ${plural(n, 'shape')} to ${Math.round(normAngle(deg))}°` };
+        return { result: `Set ${plural(n, 'shape')} to ${Math.round(normAngle(deg))}°` };
       }
       st.rotateSelection(deg);
-      return { result: `Rotated ${plural(n, 'shape')} by ${Math.round(deg)}°`, summary: `Rotated ${plural(n, 'shape')} ${Math.round(deg)}°` };
+      return { result: `Rotated ${plural(n, 'shape')} by ${Math.round(deg)}°` };
     }
 
     case 'copy':
       needSelection();
       st.copy();
-      return { result: `Copied ${plural(st.selectedIds.length, 'shape')}`, summary: `Copied ${plural(st.selectedIds.length, 'shape')}` };
+      return { result: `Copied ${plural(st.selectedIds.length, 'shape')}` };
 
     case 'cut':
       needSelection();
       st.cut();
-      return { result: `Cut ${plural(st.selectedIds.length, 'shape')}`, summary: `Cut ${plural(st.selectedIds.length, 'shape')}` };
+      return { result: `Cut ${plural(st.selectedIds.length, 'shape')}` };
 
     case 'paste': {
       if (!st.clipboard) throw new InputError('The clipboard is empty. Copy or cut first.');
       const x = number(input, 'x', true), y = number(input, 'y', true);
       st.paste(x !== undefined && y !== undefined ? { x, y } : undefined);
       const ids = useStore.getState().selectedIds;
-      return { result: `Pasted ${JSON.stringify(ids)}`, summary: `Pasted ${plural(ids.length, 'shape')}` };
+      return { result: `Pasted ${aliasList(ids)}` };
     }
 
     case 'delete_selection': {
       needSelection();
       const n = st.selectedIds.length;
       st.deleteSelected();
-      return { result: `Deleted ${plural(n, 'shape')}`, summary: `Deleted ${plural(n, 'shape')}` };
+      return { result: `Deleted ${plural(n, 'shape')}` };
     }
 
     case 'set_color': {
       const target = oneOf(input, 'target', ['line', 'fill'] as const)!;
-      if (target === 'line' && String(input.color).trim().toLowerCase() === 'none') throw new InputError('Lines always have a color');
+      if (target === 'line' && String(input.color).trim().toLowerCase() === 'none') throw new InputError('Lines always have a color; for no visible outline, use the fill color');
       const value = color(input, 'color', { none: target === 'fill' })!;
       const n = st.selectedIds.length;
       if (target === 'line') st.setColor(value);
@@ -430,8 +533,7 @@ function run(name: string, input: Record<string, unknown>, pointing: Pointing): 
         st.setFill(value);
       }
       const what = n === 0 ? `default ${target} color` : `${target} of ${plural(n, 'shape')}`;
-      const label = colorName(value);
-      return { result: `Set ${what} to ${label}`, summary: `Set ${what} to ${label}` };
+      return { result: `Set ${what} to ${colorName(value)}` };
     }
 
     case 'set_key_color': {
@@ -439,7 +541,7 @@ function run(name: string, input: Record<string, unknown>, pointing: Pointing): 
       if (key < 1 || key > 5) throw new InputError('key must be 1-5');
       const value = color(input, 'color')!;
       st.setPaletteSlot(key - 1, value);
-      return { result: `Key ${key} is now ${colorName(value)}`, summary: `Put ${colorName(value)} on key ${key}` };
+      return { result: `Key ${key} is now ${colorName(value)}` };
     }
 
     case 'save_swatches': {
@@ -447,7 +549,7 @@ function run(name: string, input: Record<string, unknown>, pointing: Pointing): 
       if (!Array.isArray(list) || list.length === 0) throw new InputError('colors must be a non-empty list');
       const values = list.map((c) => color({ color: c }, 'color')!);
       for (const v of values) st.saveSwatch(v);
-      return { result: `Saved ${plural(values.length, 'color')}: ${values.join(', ')}`, summary: `Saved ${plural(values.length, 'color')}` };
+      return { result: `Saved ${plural(values.length, 'color')}: ${values.join(', ')}` };
     }
 
     case 'arrange': {
@@ -455,7 +557,7 @@ function run(name: string, input: Record<string, unknown>, pointing: Pointing): 
       const to = oneOf(input, 'to', ['front', 'back'] as const)!;
       if (to === 'front') st.bringToFront();
       else st.sendToBack();
-      return { result: `Moved selection to the ${to}`, summary: to === 'front' ? 'Brought to front' : 'Sent to back' };
+      return { result: `Moved selection to the ${to}` };
     }
 
     case 'undo_redo': {
@@ -470,20 +572,20 @@ function run(name: string, input: Record<string, unknown>, pointing: Pointing): 
       }
       if (done === 0) throw new InputError(`Nothing to ${action}`);
       const label = action === 'undo' ? 'Undid' : 'Redid';
-      return { result: `${label} ${plural(done, 'step')}`, summary: `${label} ${plural(done, 'step')}` };
+      return { result: `${label} ${plural(done, 'step')}` };
     }
 
     case 'clear_all': {
       const n = st.shapes.length;
       st.clearAll();
-      return { result: `Removed ${plural(n, 'shape')}`, summary: 'Cleared the canvas' };
+      return { result: `Removed ${plural(n, 'shape')}` };
     }
 
     case 'set_view': {
       const action = oneOf(input, 'action', ['fit', 'zoom_in', 'zoom_out', 'reset'] as const)!;
       ({ fit: fitToContent, zoom_in: zoomIn, zoom_out: zoomOut, reset: resetZoom })[action]();
       const labels = { fit: 'Fit all shapes on screen', zoom_in: 'Zoomed in', zoom_out: 'Zoomed out', reset: 'Zoomed to 100%' };
-      return { result: labels[action], summary: labels[action] };
+      return { result: labels[action] };
     }
 
     default:

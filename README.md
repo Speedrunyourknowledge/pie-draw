@@ -65,7 +65,7 @@ To skip the form, copy `.env.example` to `.env.local`, fill it in, and restart `
 
 ### Drawing and Editing
 
-- **Create shapes** from the empty-canvas menu. Choosing a shape turns the pointer into a crosshair with a small icon of that shape. Drag to draw it at any size, or click to place it at a default size. The pointer then returns to the pen.
+- **Create shapes** from the empty-canvas menu. Choosing a shape turns the pointer into a crosshair with a small icon of that shape. Drag to draw it at any size, or click to place it at a default size. For triangles, drag to draw one side, then click to place the third corner; it snaps to right angles and equal sides. The pointer then returns to the pen.
 - **Freehand drawing** with live shape recognition. If a stroke closes into a recognized shape, a **preview** of that shape appears. Release to snap to that shape.
 - **Straight lines.** Hold **Shift** partway through a freehand stroke and it becomes a straight line from where the stroke began. It snaps to horizontal, vertical and 45° when close. Let go of Shift to continue freehand.
 - **Connecting lines.** A selected line shows a handle at each end; drag one to reshape the line. Line ends snap onto other lines' ends and onto the corners of squares, rectangles and triangles (a ring marks the joint). Moving a shape or line snaps it the same way. Dragging from the end of an unselected line draws onward from that exact point.
@@ -121,9 +121,9 @@ Saving and opening files can be done through the **File** menu in the toolbar. D
 
 **Feedback and discoverability.** A status line at the bottom always says what the user can currently do, in every state and tool. Hovering a shape turns the pointer into a pointing finger (a move cursor once it is selected) and adds a glow, and a click within a small margin outside a shape's outline, or beside a thin stroke, still gets it. When the canvas is blank, the user is instructed how to open the pie menu and how to access the help panel.
 
-**The assistant uses tools, not a separate feature set.** The model gets a list of tools (`src/ai/tools.ts`), each a thin wrapper around an existing store action, and the app runs whatever calls it asks for. This keeps the assistant's abilities exactly the app's abilities. It also makes its work visible in the usual way: the shapes it edits get selected, and its changes show up in undo history.
+**The assistant uses tools, not a separate feature set.** The model gets a list of tools (`src/ai/tools.ts`), each a thin wrapper around an existing store action, and the app runs whatever calls it asks for. This keeps the assistant's abilities exactly the app's abilities, and its changes show up in undo history like any other edit. The chat doesn't list tool calls, since the user watches the canvas change as it works. Shapes can be created many at once in one call (and one undo step), so a whole scene doesn't take hundreds of calls.
 
-**Select, then act.** Editing tools act on the selection, as they do for a user, instead of taking shape ids. A request like "make the red one bigger" first selects the red shape and then scales it, so the user sees which shape was picked before and after the change.
+**Select, then act.** Editing tools act on the selection, as they do for a user, instead of taking shape ids. A request like "make the red one bigger" first selects the red shape and then scales it. The assistant's selection is kept apart from the user's, so the user's own selection is never changed or shown changing while it works.
 
 **Pointing instead of coordinates.** Nobody wants to type coordinates, so the mouse supplies the location. Each message is sent with the pointer's position, the shape under it, the visible area, the selection, and a summary of every shape. That gives the model what it needs to resolve "here", "this", "the one on the left", or "the biggest circle".
 
