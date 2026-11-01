@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { Pt } from '../types';
-import { DEFAULT_MODEL, describeError, rejectsImages, step, type AiSettings, type Provider, type StepProgress, type StepResult, type Turn } from './providers';
+import { describeError, rejectsImages, step, type AiSettings, type Provider, type StepProgress, type StepResult, type Turn } from './providers';
 import { compact } from './compact';
 import { SYSTEM_PROMPT } from './prompt';
 import { pictureUrl, type Picture } from './snapshot';
@@ -54,7 +54,7 @@ function readSettings(): AiSettings {
   const fromEnv: AiSettings = {
     provider: ENV_PROVIDER,
     apiKey: '',
-    model: env.VITE_AI_MODEL || DEFAULT_MODEL[ENV_PROVIDER],
+    model: env.VITE_AI_MODEL ?? '',
     baseUrl: env.VITE_AI_SERVER_URL ?? '',
   };
   try {

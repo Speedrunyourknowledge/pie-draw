@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { MAX_ATTACHMENTS, isConfigured, usesProxy, useChat, type LogItem } from '../ai/chat';
-import { DEFAULT_MODEL, DEFAULT_URL, type AiSettings, type Provider } from '../ai/providers';
+import { DEFAULT_URL, MODEL_PLACEHOLDER, type AiSettings, type Provider } from '../ai/providers';
 import { IMAGE_TYPES, pictureUrl, readImageFile, type Picture } from '../ai/snapshot';
 import { useStore } from '../store';
 import { toScreen, toWorld } from '../view';
@@ -449,10 +449,8 @@ function Settings({ onDone }: { onDone: () => void }) {
   const set = (patch: Partial<AiSettings>) => setDraft((d) => ({ ...d, ...patch }));
 
   const pickProvider = (provider: Provider) =>
-    // Swap in the new provider's default model, unless the user typed their own.
     set({
       provider,
-      model: !draft.model || draft.model === DEFAULT_MODEL[draft.provider] ? DEFAULT_MODEL[provider] : draft.model,
       baseUrl: '', // each provider has its own address
     });
 
@@ -485,7 +483,7 @@ function Settings({ onDone }: { onDone: () => void }) {
       </label>
       <label>
         Model
-        <input value={draft.model} onChange={(e) => set({ model: e.target.value })} placeholder={DEFAULT_MODEL[draft.provider] || 'e.g. gpt-6-luna, deepseek-flash'} required />
+        <input value={draft.model} onChange={(e) => set({ model: e.target.value })} placeholder={MODEL_PLACEHOLDER[draft.provider]} required />
       </label>
       <label>
         <span>Server URL <span className="optional">(optional)</span></span>

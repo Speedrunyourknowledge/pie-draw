@@ -17,9 +17,9 @@ export interface AiSettings {
   baseUrl: string;
 }
 
-export const DEFAULT_MODEL: Record<Provider, string> = {
-  anthropic: 'claude-opus-5-5',
-  openai: '',
+export const MODEL_PLACEHOLDER: Record<Provider, string> = {
+  anthropic: 'e.g. claude-sonnet-5-5',
+  openai: 'e.g. gpt-6-luna, deepseek-flash',
 };
 export const DEFAULT_URL: Record<Provider, string> = {
   anthropic: 'https://api.anthropic.com',

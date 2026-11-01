@@ -113,11 +113,11 @@ export const TOOLS: ToolSpec[] = [
             required: ['type'],
           },
         },
-        line_color: colorParam('Default outline color for items that leave it out.'),
-        fill_color: colorParam('Default fill color for items that leave it out.'),
+        line_color: colorParam('Shared outline color (for lines, their color). An item\'s own line_color overrides it.'),
+        fill_color: colorParam('Shared fill color, or none. An item\'s own fill_color overrides it.'),
         outline_matches_fill: {
           type: 'boolean',
-          description: 'true to give every filled shape without its own line_color an outline the same color as its fill, so it has no visible outline. Saves repeating each color. Lines still use line_color.',
+          description: 'true to give each filled shape an outline the color of its own fill, so it has no visible outline. Use instead of a shared line_color. An item\'s own line_color still overrides it.',
         },
       },
       required: ['shapes'],
@@ -610,6 +610,9 @@ function run(name: string, input: Record<string, unknown>, pointing: Pointing): 
       const items = input.shapes;
       if (!Array.isArray(items) || items.length === 0) throw new InputError('shapes must be a non-empty list');
       if (items.length > MAX_BATCH) throw new InputError(`At most ${MAX_BATCH} shapes per call; split the rest into more calls`);
+      if (input.outline_matches_fill === true && input.line_color !== undefined) {
+        throw new InputError('Set either line_color or outline_matches_fill for the call, not both. Nothing was created.');
+      }
       const fill = color(input, 'fill_color', { optional: true, none: true });
       const defaults: Defaults = {
         line: color(input, 'line_color', { optional: true }) ?? st.currentColor,

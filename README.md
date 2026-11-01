@@ -56,7 +56,7 @@ Click **Assistant** in the top bar (or press **/**) to open a chat panel and ask
 
 The first time the panel opens, it asks for a provider, API key and model. The settings are stored in this browser only.
 
-- **Claude**: an [Anthropic API key](https://console.anthropic.com/) and a model, `claude-opus-5-5` by default.
+- **Claude**: an [Anthropic API key](https://console.anthropic.com/) and a model, e.g. `claude-sonnet-5-5`.
 - **OpenAI-compatible**: OpenAI, or any service that offers the same API (OpenRouter, Groq, or local servers such as Ollama and LM Studio). Enter the service's **Server URL**, e.g. `https://openrouter.ai/api/v1` or `http://localhost:11434/v1` for Ollama. The model must support tool calling.
 
 The Server URL is optional for Claude and OpenAI. When left empty, the app uses their usual addresses.
