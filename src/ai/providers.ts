@@ -112,6 +112,9 @@ function anthropicError(SDK: typeof Anthropic, e: unknown): unknown {
 
 // ---- Anthropic (Claude) ----
 
+/** How much the model thinks before acting: low, medium, high, xhigh or max. */
+const EFFORT = 'medium';
+
 /**
  * Whether the model takes adaptive thinking (Claude 4.6 and later; Haiku from 5). Older models
  * reject it, so they're sent no thinking settings at all.
@@ -184,7 +187,9 @@ async function anthropicStep(settings: AiSettings, system: string, tools: ToolSp
     messages,
     cache_control: { type: 'ephemeral' }, // the history only grows, so each turn reuses the last one's cache
     // Thinking is shown as a readable summary; without `display` it comes back empty.
-    ...(adaptiveThinking(settings.model) ? { thinking: { type: 'adaptive' as const, display: 'summarized' as const } } : {}),
+    ...(adaptiveThinking(settings.model)
+      ? { thinking: { type: 'adaptive' as const, display: 'summarized' as const }, output_config: { effort: EFFORT } }
+      : {}),
   };
   let response: Anthropic.Beta.BetaMessage;
   try {

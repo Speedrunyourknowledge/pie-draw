@@ -53,11 +53,14 @@ const areaParam = {
   required: ['left', 'top', 'right', 'bottom'],
 };
 const colorParam = (what: string) => ({ type: 'string', description: `${what} ${COLOR_HELP}` });
+const idsParam = { type: 'array', items: { type: 'string' }, description: 'Act on these shapes instead of the selection. They become the selection.' };
+/** Tools that act on the selection and also take ids, to skip a select_shapes call. */
+const TAKES_IDS = new Set(['move_selection', 'scale_selection', 'rotate_selection', 'copy', 'cut', 'delete_selection', 'set_color', 'arrange']);
 
 export const TOOLS: ToolSpec[] = [
   {
     name: 'view_canvas',
-    description: `Returns a fresh picture of the canvas with the same header as the <canvas> block in user messages. Use it to check your work partway through a task (draw a layer, look, fix what's off). With area, pictures only that part of the canvas, to look closely. With at most ${LIST_LIMIT} shapes, the full shape list comes too.`,
+    description: `Returns a fresh picture of the canvas with the same header as the <canvas> block in user messages. Use it to check your work. With area, pictures only that part of the canvas, to look closely. With at most ${LIST_LIMIT} shapes, the full shape list comes too.`,
     parameters: {
       type: 'object',
       properties: { area: { ...areaParam, description: 'The part of the canvas to picture. Leave out for the visible area.' } },
@@ -90,7 +93,7 @@ export const TOOLS: ToolSpec[] = [
           items: {
             type: 'object',
             properties: {
-              type: { type: 'string', enum: [...SHAPES, 'line'] },
+              type: { type: 'string', enum: [...SHAPES, 'line'], description: 'Leave out to use the shared type. Items with points are triangles.' },
               x: { ...int, description: 'Center. Not for lines or triangles given by points.' },
               y: int,
               width: { ...int, description: 'Leave out width and height for the default size. Squares and circles use the larger of the two for both.' },
@@ -110,9 +113,9 @@ export const TOOLS: ToolSpec[] = [
               line_color: colorParam('Outline color (for a line, its color). For a shape with no visible outline, use its fill color.'),
               fill_color: colorParam('Fill color, or none.'),
             },
-            required: ['type'],
           },
         },
+        type: { type: 'string', enum: [...SHAPES, 'line'], description: 'Shared type. An item\'s own type overrides it.' },
         line_color: colorParam('Shared outline color (for lines, their color). An item\'s own line_color overrides it.'),
         fill_color: colorParam('Shared fill color, or none. An item\'s own fill_color overrides it.'),
         outline_matches_fill: {
@@ -140,27 +143,42 @@ export const TOOLS: ToolSpec[] = [
   {
     name: 'move_selection',
     description: 'Moves the selected shapes by (dx, dy) canvas units. Positive dx is right, positive dy is down.',
-    parameters: { type: 'object', properties: { dx: int, dy: int }, required: ['dx', 'dy'] },
+    parameters: { type: 'object', properties: { dx: int, dy: int, ids: idsParam }, required: ['dx', 'dy'] },
+  },
+  {
+    name: 'move_shapes',
+    description: 'Moves each listed shape by its own (dx, dy), in one step (one undo step), and selects them. Use it to move several shapes by different amounts, such as when aligning them.',
+    parameters: {
+      type: 'object',
+      properties: {
+        moves: {
+          type: 'array',
+          maxItems: MAX_BATCH,
+          items: { type: 'object', properties: { id: { type: 'string' }, dx: int, dy: int }, required: ['id', 'dx', 'dy'] },
+        },
+      },
+      required: ['moves'],
+    },
   },
   {
     name: 'scale_selection',
     description: 'Scales the selected shapes about the center of their joint bounding box; factor 2 doubles the size. factor_y, if given, sets the vertical factor separately (rotated shapes keep their angle and stretch along their own sides). A selection containing a square or circle always scales evenly.',
-    parameters: { type: 'object', properties: { factor: num, factor_y: num }, required: ['factor'] },
+    parameters: { type: 'object', properties: { factor: num, factor_y: num, ids: idsParam }, required: ['factor'] },
   },
   {
     name: 'rotate_selection',
     description: 'Rotates the selected shapes clockwise by degrees (negative is counterclockwise), turning them together about the center of their joint box. With absolute true, sets each shape to that angle instead, each turning about its own center (0 stands it upright).',
-    parameters: { type: 'object', properties: { degrees: int, absolute: { type: 'boolean' } }, required: ['degrees'] },
+    parameters: { type: 'object', properties: { degrees: int, absolute: { type: 'boolean' }, ids: idsParam }, required: ['degrees'] },
   },
   {
     name: 'copy',
     description: 'Copies the selected shapes to the clipboard.',
-    parameters: { type: 'object', properties: {} },
+    parameters: { type: 'object', properties: { ids: idsParam } },
   },
   {
     name: 'cut',
     description: 'Copies the selected shapes to the clipboard and removes them.',
-    parameters: { type: 'object', properties: {} },
+    parameters: { type: 'object', properties: { ids: idsParam } },
   },
   {
     name: 'paste',
@@ -170,7 +188,7 @@ export const TOOLS: ToolSpec[] = [
   {
     name: 'delete_selection',
     description: 'Deletes the selected shapes.',
-    parameters: { type: 'object', properties: {} },
+    parameters: { type: 'object', properties: { ids: idsParam } },
   },
   {
     name: 'set_color',
@@ -180,6 +198,7 @@ export const TOOLS: ToolSpec[] = [
       properties: {
         target: { type: 'string', enum: ['line', 'fill'] },
         color: { type: 'string', description: `${COLOR_HELP} none is only valid for fill.` },
+        ids: idsParam,
       },
       required: ['target', 'color'],
     },
@@ -205,7 +224,7 @@ export const TOOLS: ToolSpec[] = [
   {
     name: 'arrange',
     description: 'Brings the selected shapes to the front or sends them to the back.',
-    parameters: { type: 'object', properties: { to: { type: 'string', enum: ['front', 'back'] } }, required: ['to'] },
+    parameters: { type: 'object', properties: { to: { type: 'string', enum: ['front', 'back'] }, ids: idsParam }, required: ['to'] },
   },
   {
     name: 'undo_redo',
@@ -452,6 +471,16 @@ function findShapes(input: Record<string, unknown>): string {
 
 class InputError extends Error {}
 
+/** Shape ids (or their aliases) given by the model, as real ids. Every one must exist. */
+function shapeIds(given: unknown): string[] {
+  if (!Array.isArray(given) || given.some((id) => typeof id !== 'string')) throw new InputError('ids must be a list of shape ids');
+  const { shapes } = useStore.getState();
+  const ids = (given as string[]).map((a) => idByAlias.get(a.trim()) ?? a);
+  const unknown = (given as string[]).filter((_, i) => !shapes.some((s) => s.id === ids[i]));
+  if (unknown.length > 0) throw new InputError(`No shape with id ${unknown.join(', ')}`);
+  return ids;
+}
+
 function number(input: Record<string, unknown>, key: string, optional: true): number | undefined;
 function number(input: Record<string, unknown>, key: string): number;
 function number(input: Record<string, unknown>, key: string, optional = false) {
@@ -504,11 +533,14 @@ interface Defaults {
   fill: string | null;
   /** Filled shapes with no line_color of their own get an outline the color of their fill. */
   matchFill: boolean;
+  type: unknown;
 }
 
 /** One create_shapes item as a shape, or an InputError saying what is wrong with it. */
 function buildShape(item: Record<string, unknown>, defaults: Defaults): Shape {
-  const type = oneOf(item, 'type', [...SHAPES, 'line'] as const)!;
+  const own = item.type ?? (item.points !== undefined ? 'triangle' : defaults.type);
+  if (own === undefined) throw new InputError('type is required (or set a shared type)');
+  const type = oneOf({ type: own }, 'type', [...SHAPES, 'line'] as const)!;
   const lineValue = color(item, 'line_color', { optional: true }) ?? defaults.line;
   const sizeOk = (w: number, h: number) => {
     if (Math.max(w, h) > MAX_SIZE) throw new InputError(`${type} can be at most ${MAX_SIZE} units across`);
@@ -594,6 +626,11 @@ function runNow(name: string, input: Record<string, unknown>, pointing: Pointing
 }
 
 function run(name: string, input: Record<string, unknown>, pointing: Pointing): ToolOutcome {
+  if (TAKES_IDS.has(name) && input.ids !== undefined) {
+    const ids = shapeIds(input.ids);
+    if (ids.length === 0) throw new InputError('ids must not be empty; leave it out to use the selection');
+    useStore.getState().setSelection(ids);
+  }
   const st = useStore.getState();
   const selection = () => st.shapes.filter((s) => st.selectedIds.includes(s.id));
 
@@ -618,6 +655,7 @@ function run(name: string, input: Record<string, unknown>, pointing: Pointing): 
         line: color(input, 'line_color', { optional: true }) ?? st.currentColor,
         fill: fill === undefined ? st.currentFill : fill,
         matchFill: input.outline_matches_fill === true,
+        type: input.type,
       };
       const shapes = items.map((item, i) => {
         if (typeof item !== 'object' || item === null) throw new InputError(`shapes[${i}] must be an object`);
@@ -636,11 +674,7 @@ function run(name: string, input: Record<string, unknown>, pointing: Pointing): 
     }
 
     case 'select_shapes': {
-      const given = input.ids;
-      if (!Array.isArray(given) || given.some((id) => typeof id !== 'string')) throw new InputError('ids must be a list of shape ids');
-      const ids = (given as string[]).map((a) => idByAlias.get(a.trim()) ?? a);
-      const unknown = (given as string[]).filter((_, i) => !st.shapes.some((s) => s.id === ids[i]));
-      if (unknown.length > 0) throw new InputError(`No shape with id ${unknown.join(', ')}`);
+      const ids = shapeIds(input.ids);
       const next = input.add === true ? [...new Set([...st.selectedIds, ...ids])] : ids;
       st.setSelection(next);
       return { result: next.length === 0 ? 'Cleared the selection' : `Selected ${aliasList(next)}` };
@@ -655,6 +689,32 @@ function run(name: string, input: Record<string, unknown>, pointing: Pointing): 
       const dx = number(input, 'dx'), dy = number(input, 'dy');
       st.nudge(dx, dy);
       return { result: `Moved ${plural(st.selectedIds.length, 'shape')} by (${r(dx)}, ${r(dy)})` };
+    }
+
+    case 'move_shapes': {
+      const moves = input.moves;
+      if (!Array.isArray(moves) || moves.length === 0) throw new InputError('moves must be a non-empty list');
+      if (moves.length > MAX_BATCH) throw new InputError(`At most ${MAX_BATCH} moves per call; split the rest into more calls`);
+      const delta = new Map<string, Pt>();
+      moves.forEach((m, i) => {
+        if (typeof m !== 'object' || m === null) throw new InputError(`moves[${i}] must be an object`);
+        const item = m as Record<string, unknown>;
+        try {
+          const [id] = shapeIds([item.id]);
+          if (delta.has(id)) throw new InputError(`${String(item.id)} is listed twice`);
+          delta.set(id, [number(item, 'dx'), number(item, 'dy')]);
+        } catch (e) {
+          if (e instanceof InputError) throw new InputError(`moves[${i}]: ${e.message}. Nothing was moved.`);
+          throw e;
+        }
+      });
+      st.checkpoint();
+      st.updateShapes(new Map(st.shapes.filter((s) => delta.has(s.id)).map((s) => {
+        const [dx, dy] = delta.get(s.id)!;
+        return [s.id, { x: s.x + dx, y: s.y + dy }];
+      })));
+      st.setSelection([...delta.keys()]);
+      return { result: `Moved ${plural(delta.size, 'shape')}` };
     }
 
     case 'scale_selection': {
