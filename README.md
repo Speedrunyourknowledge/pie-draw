@@ -47,9 +47,9 @@ With gestures enabled, single strokes drawn on the canvas act as commands.
 
 Click **Assistant** in the top bar (or press **/**) to open a chat panel and ask for changes in plain words: "put a green square here", "make the two circles bigger", "copy the triangle and paste it next to the square", "delete everything red".
 
-- **Point while you type.** "Here" is where the mouse is on the canvas when you send the message, and "this" is the shape under it. A small marker shows that spot while you type.
-- **Every action is one the app already has.** The assistant works through the same actions as the menu, gestures and keyboard: create shapes, select, move, scale, cut / copy / paste, delete, recolor, z-order, undo / redo, clear, and zoom. Each change is a normal undo step, so **Undo** reverts it like any other edit.
-- **Beyond the required commands:** recoloring line and fill, bringing shapes to front / sending them to back, undoing or redoing several steps ("undo that"), and adjusting the view ("show me everything").
+- **Point while you type.** "Here" is where the mouse is on the canvas when you send the message, and "this" is the shape under it. A small marker shows that spot while you type, and the shape "this" will mean glows blue.
+- **Every action is one the app already has.** The assistant works through the same actions as the menu, gestures and keyboard: create shapes and straight lines, select, move, scale, rotate, cut / copy / paste, delete, recolor, z-order, undo / redo, clear, and zoom. Each change is a normal undo step, so **Undo** reverts it like any other edit.
+- **Beyond the required commands:** recoloring line and fill with any color ("make it teal", "use sunset colors"), rotating ("turn the square into a diamond"), drawing straight lines ("connect the two circles", "draw an arrow pointing at the triangle"), changing the color keys and saving swatches ("save these as my palette"), bringing shapes to front / sending them to back, undoing or redoing several steps ("undo that"), and adjusting the view ("show me everything").
 - **One conversation.** The trash button clears it; the stop button cancels a request in progress.
 
 #### Connecting a Model
@@ -67,13 +67,19 @@ To skip the form, copy `.env.example` to `.env.local`, fill it in, and restart `
 
 - **Create shapes** from the empty-canvas menu. Choosing a shape turns the pointer into a crosshair with a small icon of that shape. Drag to draw it at any size, or click to place it at a default size. The pointer then returns to the pen.
 - **Freehand drawing** with live shape recognition. If a stroke closes into a recognized shape, a **preview** of that shape appears. Release to snap to that shape.
-- **Object manipulation.** Select, move, and scale objects directly, by mouse, trackpad, or keyboard.
+- **Straight lines.** Hold **Shift** partway through a freehand stroke and it becomes a straight line from where the stroke began. It snaps to horizontal, vertical and 45° when close. Let go of Shift to continue freehand.
+- **Connecting lines.** A selected line shows a handle at each end; drag one to reshape the line. Line ends snap onto other lines' ends and onto the corners of squares, rectangles and triangles (a ring marks the joint). Moving a shape or line snaps it the same way. Dragging from the end of an unselected line draws onward from that exact point.
+- **Object manipulation.** Select, move, scale, and rotate objects directly, by mouse, trackpad, or keyboard. The round handle above the selection box rotates. It snaps to 45° steps when close, and double-clicking it resets the angle. **R** / **Shift+R** turn the selection a quarter turn.
 - **Multi-select.** Select several objects by clicking or with a selection box. A multi-selection acts as one object: moving, scaling, and recoloring affects all selected objects.
 - **Cut, copy, and paste**, **z-order** (To Front / To Back), an **eraser tool**, and **undo / redo**.
 
 ### Color
 
-Two swatches show the **line color** and **fill color**, with five colors available for each. The swatches indicate the color of the selected shape or, with nothing selected, the color new shapes will get. Colors can be picked from the swatches, by dragging a swatch onto a shape, or from the shape menu's Line / Fill submenus.
+Two swatches show the **line color** and **fill color**. The swatches indicate the color of the selected shape or, with nothing selected, the color new shapes will get. Colors can be picked from the swatches, by dragging a swatch onto a shape, or from the shape menu's Line / Fill submenus.
+
+- **Color keys.** Five colors sit on keys **1–5**, and the swatch fan, the menu's Line / Fill submenus and the number gestures all use them. They start as black, red, blue, green and amber, but any color can be put on any key.
+- **Any color.** The rainbow **+** in the fan opens a color editor with a saturation / brightness square, a hue strip, a hex field, and (in Chrome / Edge) an eyedropper. The selection updates live as you drag, and each drag is one undo step.
+- **Saved colors.** Up to six colors can be saved. They appear in an outer row of the fan, like the pie menu's submenu ring. Drag any color onto a numbered swatch to put it on that key, or drag one key onto another to swap them. Keys and saved colors are remembered in this browser.
 
 ### Navigation
 
@@ -103,9 +109,17 @@ Saving and opening files can be done through the **File** menu in the toolbar. D
 
 **Color swatches that fan out.** There are two color swatches, and they are distinguished by their appearance, not just their label. Clicking a swatch fans the colors out in an arc that echoes the pie menu. Dragging a swatch onto a shape recolors it without having to select it first.
 
+**Custom colors go on the keys, not in a new place.** The five keys stay in fixed positions in the fan, so choosing one keeps working from memory. A custom color becomes quick to reach by being put on a key, after which the number key, the number gesture and the menu all apply it. The custom button comes first in the outer row, so it never moves as colors are saved. The full color editor stays one click away for the less frequent task of creating a new color.
+
+**Rotation by direct manipulation.** A visible handle is easier to discover than a hidden modifier, and dragging it gives continuous feedback. The angle snaps only when close to a 45° step, so common angles are easy to hit exactly while any other angle is still possible. A single shape's box turns with it, so its edges still stretch it along its own width and height. A multi-selection keeps an upright box. Stretching it moves every shape exactly with the box, but a turned shape can't be slanted, so it keeps its angle and each of its sides grows by as much as the stretch lengthens that side.
+
+**Line ends are the magnets.** Snapping happens only when one side of the pair is a line's end: end to end, end to corner, or a moved shape's corner onto an end. Corners never pull on corners, so moving shapes near each other stays free. Circles, ellipses and freehand strokes have no snap points. The snap distance is fixed on screen, so it feels the same at any zoom.
+
+**Straight lines without a new tool.** Holding Shift while drawing already means "constrain" elsewhere in the app (equal sides, kept proportions). Shift pressed at the *start* of a drag still box-selects. Pressing it once the stroke is underway straightens the line, so the two uses don't collide.
+
 **Ghost preview for shape recognition.** When drawing freehand, a recognized shape appears as a ghost *behind* the drawing, at the exact size it will snap to. It changes only after multiple consecutive frames agree.
 
-**Feedback and discoverability.** A status line at the bottom always says what the user can currently do, in every state and tool. When the canvas is blank, the user is instructed how to open the pie menu and how to access the help panel.
+**Feedback and discoverability.** A status line at the bottom always says what the user can currently do, in every state and tool. Hovering a shape turns the pointer into a pointing finger (a move cursor once it is selected) and adds a glow, and a click within a small margin outside a shape's outline, or beside a thin stroke, still gets it. When the canvas is blank, the user is instructed how to open the pie menu and how to access the help panel.
 
 **The assistant uses tools, not a separate feature set.** The model gets a list of tools (`src/ai/tools.ts`), each a thin wrapper around an existing store action, and the app runs whatever calls it asks for. This keeps the assistant's abilities exactly the app's abilities. It also makes its work visible in the usual way: the shapes it edits get selected, and its changes show up in undo history.
 
@@ -119,7 +133,7 @@ Saving and opening files can be done through the **File** menu in the toolbar. D
 
 ### Gesture Design
 
-**The gesture set.** Gestures are chosen to be memorable and distinct. Shapes are drawn as themselves. Copy is a **C**. Cut is a slash. Paste is an upside-down caret marking where the content goes. The five colors are the numbers **1–5**, matching the keyboard shortcuts.
+**The gesture set.** Gestures are chosen to be memorable and distinct. Shapes are drawn as themselves. Copy is a **C**. Cut is a slash. Paste is an upside-down caret marking where the content goes. The five color keys are the numbers **1–5**, matching the keyboard shortcuts. They apply whatever color is on that key.
 
 **Recognizer plus heuristics.** The Penny Pincher recognizer ([Taranta & LaViola, 2015](#references)) is implemented by hand from the paper's pseudocode in `src/gestures/recognizer.ts`. It resamples a stroke into 32 evenly spaced points, takes the 31 vectors between them, and picks the template whose vectors have the highest summed dot product with the stroke's. The paper normalizes only the template vectors, so its score is a sum of cosines that grows with the stroke's size. Here the stroke's vectors are also normalized and the sum is averaged, giving a mean cosine between −1 and 1. The best match is the same either way, but a score that doesn't depend on size lets a fixed threshold decide when a stroke isn't a gesture.
 
@@ -164,9 +178,9 @@ Accuracy is measured by classifying each test stroke once. Timing is measured se
 - **Mobile and touch.** No support for touchscreen pinch-to-zoom or two-finger pan. Additionally, there is no alternate UI for small screens.
 - **Browsers other than desktop Chrome/Edge.** Can save files, but Save downloads a new copy each time instead of overwriting the original.
 - **Pie menu accessibility.** The menu works from the keyboard, but nothing is announced to screen readers.
-- **Rotation.** Shapes cannot be rotated. Additionally, the gesture recognizer is not rotation invariant. Generated templates cover quarter turns of the shape and lasso gestures only.
+- **Rotation.** There is no rotate gesture. Additionally, the gesture recognizer is not rotation invariant. Generated templates cover quarter turns of the shape and lasso gestures only. Shapes drawn by gesture snap upright.
 - **Filling several shapes by gesture.** The fill color gesture can only affect one shape at a time. Dragging inside a selection moves it, so it can't detect a gesture that starts inside it.
-- **Drawing capabilities.** One stroke width, a fixed five-color palette, no command to create straight lines.
+- **Drawing capabilities.** One stroke width. Straight lines are freehand strokes, with no arrowheads or endpoint editing.
 - **Erasing.** There is no pixel-level erasing, by design.
 - **Export and persistence.** No PNG/SVG export, no autosave.
 

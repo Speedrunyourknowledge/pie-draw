@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
+import { colorLabel } from '../colors';
 import { canFill } from '../geometry';
 import { useStore } from '../store';
-import { PALETTE } from '../types';
+import { ColorEditor } from './ColorEditor';
 
 const DRAG_THRESHOLD = 5;
 const FAN_RADIUS = 84; // swatches fan out on a quarter arc, from left to straight up
@@ -9,11 +10,16 @@ const FAN_STEP = { line: 36, fill: 35 }; // min distance between neighboring swa
 const FAN_MAX_RADIUS = 92; // past this, the arc wraps further around the button (below horizontal) instead of growing
 // Angle the arc ends at (90° = straight up). The line fan stops short so it clears the Fill button above.
 const FAN_END = { line: (132.5 * Math.PI) / 180, fill: Math.PI / 2 };
+// The outer row (custom color, then saved colors) runs from the same start, one ring further out,
+// echoing the pie menu's submenu ring. The custom button comes first so it never moves.
+const OUTER_GAP = 46;
+const OUTER_STEP = 40;
 
 type Kind = 'line' | 'fill';
 
 interface Drag {
   color: string | null;
+  slot: number | null; // dragged from key 1–5's swatch (0–4): dropping on another key swaps them
   start: [number, number];
   at: [number, number];
   moved: boolean;
@@ -26,10 +32,11 @@ function shapeIdAt(x: number, y: number): string | null {
   return top?.closest('[data-id]')?.getAttribute('data-id') ?? null;
 }
 
-const LINE_OPTIONS: { name: string; value: string | null }[] = [...PALETTE];
-const FILL_OPTIONS: { name: string; value: string | null }[] = [...PALETTE, { name: 'None', value: null }];
-
-const colorName = (c: string | null) => (c ? (PALETTE.find((p) => p.value === c)?.name ?? '') : 'None');
+/** The key swatch (data-slot) under a point, if any. */
+function slotAt(x: number, y: number): number | null {
+  const slot = document.elementFromPoint(x, y)?.closest('[data-slot]')?.getAttribute('data-slot');
+  return slot == null ? null : Number(slot);
+}
 
 /**
  * A swatch for the line color (drawn as a ring) or the fill (a disc; white with a slash for none).
@@ -39,12 +46,19 @@ export function ColorPicker({ kind }: { kind: Kind }) {
   const current = useStore((s) => (kind === 'line' ? s.currentColor : s.currentFill));
   const shapes = useStore((s) => s.shapes);
   const selectedIds = useStore((s) => s.selectedIds);
+  const palette = useStore((s) => s.palette);
+  const swatches = useStore((s) => s.swatches);
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false); // the custom color editor is open
+  const [slotTarget, setSlotTarget] = useState<number | null>(null); // key swatch under a dragged color
   const [drag, setDrag] = useState<Drag | null>(null);
   const dragRef = useRef<Drag | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  const options = kind === 'line' ? LINE_OPTIONS : FILL_OPTIONS;
+  const options: { value: string | null; slot: number | null }[] = [
+    ...palette.map((value, slot) => ({ value, slot })),
+    ...(kind === 'fill' ? [{ value: null, slot: null }] : []),
+  ];
   const label = kind === 'line' ? 'Line' : 'Fill';
   // The shapes this swatch shows and edits: the selected ones that have this kind of color.
   const selected = shapes.filter((x) => selectedIds.includes(x.id));
@@ -55,7 +69,7 @@ export function ColorPicker({ kind }: { kind: Kind }) {
   // With shapes selected the swatch shows their color (the first one's, if they differ).
   const shown = targets.length > 0 ? colorOf(targets[0]) : current;
   const mixed = targets.some((x) => colorOf(x) !== shown);
-  const shownName = mixed ? 'Mixed' : colorName(shown);
+  const shownName = mixed ? 'Mixed' : colorLabel(shown);
   const apply = (c: string | null) => {
     const st = useStore.getState();
     if (kind === 'line') st.setColor(c!);
@@ -63,13 +77,17 @@ export function ColorPicker({ kind }: { kind: Kind }) {
   };
 
   useEffect(() => {
-    if (!open) return;
+    if (!open && !editing) return;
+    const close = () => {
+      setOpen(false);
+      setEditing(false);
+    };
     const onDown = (e: PointerEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+      if (!rootRef.current?.contains(e.target as Node)) close();
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setOpen(false);
+        close();
         e.stopImmediatePropagation();
       }
     };
@@ -79,7 +97,7 @@ export function ColorPicker({ kind }: { kind: Kind }) {
       window.removeEventListener('pointerdown', onDown, true);
       window.removeEventListener('keydown', onKey, true);
     };
-  }, [open]);
+  }, [open, editing]);
 
   const update = (d: Drag | null) => {
     dragRef.current = d;
@@ -93,26 +111,43 @@ export function ColorPicker({ kind }: { kind: Kind }) {
     return s && (kind === 'line' || canFill(s)) ? s.id : null;
   };
 
-  const handlers = (color: string | null, onClick: () => void) => ({
+  const handlers = (color: string | null, onClick: () => void, slot: number | null = null) => ({
     onPointerDown: (e: React.PointerEvent) => {
       if (e.button !== 0) return;
       e.currentTarget.setPointerCapture(e.pointerId);
-      update({ color, start: [e.clientX, e.clientY], at: [e.clientX, e.clientY], moved: false });
+      update({ color, slot, start: [e.clientX, e.clientY], at: [e.clientX, e.clientY], moved: false });
     },
     onPointerMove: (e: React.PointerEvent) => {
       const d = dragRef.current;
       if (!d) return;
       const moved = d.moved || Math.hypot(e.clientX - d.start[0], e.clientY - d.start[1]) > DRAG_THRESHOLD;
       update({ ...d, at: [e.clientX, e.clientY], moved });
-      if (moved) useStore.getState().setDropTarget(targetAt(e.clientX, e.clientY));
+      if (!moved) return;
+      // Over a key's swatch, the drop changes that key; anywhere else it may paint a shape.
+      const key = d.color ? slotAt(e.clientX, e.clientY) : null;
+      setSlotTarget(key);
+      useStore.getState().setDropTarget(key === null ? targetAt(e.clientX, e.clientY) : null);
     },
     onPointerUp: (e: React.PointerEvent) => {
       const d = dragRef.current;
       update(null);
+      setSlotTarget(null);
       const st = useStore.getState();
       st.setDropTarget(null);
       if (!d) return;
       if (!d.moved) return onClick();
+      const key = d.color ? slotAt(e.clientX, e.clientY) : null;
+      if (key !== null && d.color) {
+        // The fan stays open, so the new key color can be seen (and used) right away.
+        if (d.slot === null) {
+          st.setPaletteSlot(key, d.color);
+          st.showToast(`Key ${key + 1}: ${colorLabel(d.color)}`);
+        } else if (d.slot !== key) {
+          st.swapPaletteSlots(d.slot, key);
+          st.showToast(`Swapped keys ${d.slot + 1} and ${key + 1}`);
+        }
+        return;
+      }
       const id = targetAt(e.clientX, e.clientY);
       if (id && st.selectedIds.includes(id)) {
         apply(d.color); // dropped on the selection: paint all of it
@@ -125,40 +160,83 @@ export function ColorPicker({ kind }: { kind: Kind }) {
     },
     onPointerCancel: () => {
       update(null);
+      setSlotTarget(null);
       useStore.getState().setDropTarget(null);
     },
   });
+
+  // Fan geometry: the keys (and None) on an inner arc, the custom button and saved colors outside it.
+  const arcLen = FAN_STEP[kind] * (options.length - 1);
+  const fanR = Math.min(FAN_MAX_RADIUS, Math.max(FAN_RADIUS, arcLen / (Math.PI / 2)));
+  const span = Math.max(Math.PI / 2, arcLen / fanR);
+  const fanStart = FAN_END[kind] + span; // left → up
+  const outerR = fanR + OUTER_GAP;
+  const place = (a: number, r: number) => ({ '--x': `${Math.cos(a) * r}px`, '--y': `${-Math.sin(a) * r}px` });
+  const outerAt = (j: number) => place(fanStart - (j * OUTER_STEP) / outerR, outerR);
 
   return (
     // Mouse clicks don't focus the buttons, so a later key press doesn't leave a focus ring behind.
     <div className={`color-picker ${kind}`} ref={rootRef} onMouseDown={(e) => e.preventDefault()}>
       {open &&
         options.map((c, i) => {
-          const arcLen = FAN_STEP[kind] * (options.length - 1);
-          const r = Math.min(FAN_MAX_RADIUS, Math.max(FAN_RADIUS, arcLen / (Math.PI / 2)));
-          const span = Math.max(Math.PI / 2, arcLen / r);
-          const a = FAN_END[kind] + span - (i * span) / (options.length - 1); // left → up
-          const x = Math.cos(a) * r, y = -Math.sin(a) * r;
+          const a = fanStart - (i * span) / (options.length - 1);
           const key = c.value ? `${kind === 'fill' ? '⇧' : ''}${i + 1}` : kind === 'fill' ? '⇧0' : '';
+          const name = colorLabel(c.value);
           return (
             <button
-              key={c.name}
-              className={`fan-swatch ${kind} ${c.value ? '' : 'none'} ${c.value === shown && !mixed ? 'active' : ''}`}
-              style={{ '--swatch': c.value ?? '#fff', '--x': `${x}px`, '--y': `${y}px` } as React.CSSProperties}
+              key={c.slot ?? 'none'}
+              className={`fan-swatch ${kind} ${c.value ? '' : 'none'} ${c.value === shown && !mixed ? 'active' : ''} ${c.slot !== null && c.slot === slotTarget ? 'slot-target' : ''}`}
+              style={{ '--swatch': c.value ?? '#fff', ...place(a, fanR) } as React.CSSProperties}
+              data-slot={c.slot ?? undefined}
               data-tip-side="left"
-              data-tip={`${label}: ${c.name} (${key})`}
-              aria-label={`${label}: ${c.name}`}
-              {...handlers(c.value, () => {
-                apply(c.value);
-                setOpen(false);
-              })}
+              data-tip={`${label}: ${name} (${key})${c.slot !== null ? ' · Drop a color here to change this key' : ''}`}
+              aria-label={`${label}: ${name}`}
+              {...handlers(
+                c.value,
+                () => {
+                  apply(c.value);
+                  setOpen(false);
+                },
+                c.slot,
+              )}
             >
               <span className="fan-key">{key}</span>
             </button>
           );
         })}
+      {open && (
+        <button
+          className={`fan-swatch ${kind} custom`}
+          style={outerAt(0) as React.CSSProperties}
+          data-tip-side="left"
+          data-tip="Custom color: any color, put it on a key, or save it"
+          aria-label={`Custom ${label.toLowerCase()} color`}
+          onClick={() => {
+            setOpen(false);
+            setEditing(true);
+          }}
+        >
+          <svg viewBox="0 0 20 20"><path d="M10 5.5 V14.5 M5.5 10 H14.5" /></svg>
+        </button>
+      )}
+      {open &&
+        swatches.map((c, j) => (
+          <button
+            key={c}
+            className={`fan-swatch ${kind} saved ${c === shown && !mixed ? 'active' : ''}`}
+            style={{ '--swatch': c, ...outerAt(j + 1) } as React.CSSProperties}
+            data-tip-side="left"
+            data-tip={`Saved: ${c.toUpperCase()} · Drag onto a key to use it with 1–5`}
+            aria-label={`${label}: saved color ${c.toUpperCase()}`}
+            {...handlers(c, () => {
+              apply(c);
+              setOpen(false);
+            })}
+          />
+        ))}
+      {editing && <ColorEditor kind={kind} shown={shown} onClose={() => setEditing(false)} />}
       <button
-        className={`color-current ${kind} ${shown ? '' : 'none'} ${open ? 'open' : ''}`}
+        className={`color-current ${kind} ${shown ? '' : 'none'} ${open || editing ? 'open' : ''}`}
         style={{ '--swatch': shown ?? '#fff' } as React.CSSProperties}
         disabled={disabled}
         data-tip-side="left"
@@ -169,7 +247,10 @@ export function ColorPicker({ kind }: { kind: Kind }) {
         }
         aria-label={`${label}: ${shownName}. Change ${label.toLowerCase()}`}
         aria-expanded={open}
-        {...handlers(shown, () => setOpen((o) => !o))}
+        {...handlers(shown, () => {
+          if (editing) setEditing(false);
+          else setOpen((o) => !o);
+        })}
       />
       <span className="color-label">{label}</span>
       {drag?.moved && (

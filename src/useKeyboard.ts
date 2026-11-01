@@ -3,7 +3,6 @@ import { newDoc, openDoc, saveDoc } from './file/fileOps';
 import { useChat } from './ai/chat';
 import { isMod, isTextField } from './platform';
 import { useStore } from './store';
-import { PALETTE } from './types';
 import { fitToContent, resetZoom, selectAdjacent, zoomIn, zoomOut } from './view';
 
 const PAN_STEP = 60;
@@ -75,8 +74,10 @@ export function useKeyboard(onEscape: () => void, onMenuKey: (e: KeyboardEvent) 
       // Shift+digit (matched by physical key, since Shift changes e.key) sets the fill; 0 clears it.
       else if (e.shiftKey && /^Digit[0-5]$/.test(e.code)) {
         const n = Number(e.code.slice(5));
-        st.setFill(n === 0 ? null : PALETTE[n - 1].value);
-      } else if (/^[1-5]$/.test(key)) st.setColor(PALETTE[Number(key) - 1].value);
+        st.setFill(n === 0 ? null : st.palette[n - 1]);
+      } else if (/^[1-5]$/.test(key)) st.setColor(st.palette[Number(key) - 1]);
+      // R turns the selection a quarter turn clockwise, Shift+R counterclockwise.
+      else if (key === 'r') st.rotateSelection(e.shiftKey ? -90 : 90);
       else if (key.startsWith('arrow')) {
         const dx = key === 'arrowleft' ? -1 : key === 'arrowright' ? 1 : 0;
         const dy = key === 'arrowup' ? -1 : key === 'arrowdown' ? 1 : 0;

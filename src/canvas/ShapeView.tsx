@@ -1,12 +1,6 @@
 import { memo } from 'react';
-import { smoothPath } from '../geometry';
+import { GRAB_PX, smoothPath } from '../geometry';
 import type { Shape } from '../types';
-
-/**
- * Screen pixels of extra grab area on each side of a freehand stroke (Fitts's law: a wider target is
- * faster to hit). A fixed screen size, so lines stay as easy to grab at any zoom.
- */
-const GRAB_MARGIN = 14;
 
 /**
  * Glow, in screen pixels: how far the solid ring extends past the outline, then its soft falloff.
@@ -64,7 +58,7 @@ function Halo({ shape: s, zoom }: { shape: Shape; zoom: number }) {
   const reach = s.strokeWidth / 2 + HALO_SPREAD + 3 * HALO_BLUR + 2;
   const b = bounds(s);
   return (
-    <g className="halo">
+    <g className={s.type === 'freehand' ? 'halo' : 'halo closed'}>
       <filter
         id={id}
         filterUnits="userSpaceOnUse"
@@ -126,27 +120,24 @@ export const ShapeView = memo(function ShapeView({
     pointerEvents: interactive ? ('all' as const) : ('none' as const),
   };
 
-  const body =
-    s.type === 'freehand' ? (
-      <>
-        {/* Wide invisible stroke so thin lines are easy to grab. */}
-        {interactive && (
-          <path
-            d={smoothPath(s.points)}
-            fill="none"
-            stroke="transparent"
-            strokeWidth={s.strokeWidth * zoom + 2 * GRAB_MARGIN}
-            vectorEffect="non-scaling-stroke"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            pointerEvents="stroke"
-          />
-        )}
-        {outline(s, { ...paint, pointerEvents: 'none' })}
-      </>
-    ) : (
-      outline(s, paint)
-    );
+  // A wide invisible outline under the shape, so a click a little outside it (or beside a thin
+  // stroke) still gets it. Closed shapes also take clicks anywhere inside, through their own paint.
+  const grab = interactive &&
+    outline(s, {
+      fill: 'none',
+      stroke: 'transparent',
+      strokeWidth: s.strokeWidth * zoom + 2 * GRAB_PX,
+      vectorEffect: 'non-scaling-stroke',
+      strokeLinejoin: 'round',
+      strokeLinecap: 'round',
+      pointerEvents: 'stroke',
+    });
+  const body = (
+    <>
+      {grab}
+      {outline(s, s.type === 'freehand' ? { ...paint, pointerEvents: 'none' } : paint)}
+    </>
+  );
 
   return (
     <g

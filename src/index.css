@@ -13,6 +13,11 @@
   --cursor-ew-resize: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 11 H19 M6 8 L3 11 L6 14 M16 8 L19 11 L16 14' stroke='white' stroke-width='3.6'/%3E%3Cpath d='M3 11 H19 M6 8 L3 11 L6 14 M16 8 L19 11 L16 14' stroke='%231f2933' stroke-width='1.6'/%3E%3C/svg%3E") 11 11, ew-resize;
   --cursor-nwse-resize: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 5 L17 17 M5 9.5 V5 H9.5 M17 12.5 V17 H12.5' stroke='white' stroke-width='3.6'/%3E%3Cpath d='M5 5 L17 17 M5 9.5 V5 H9.5 M17 12.5 V17 H12.5' stroke='%231f2933' stroke-width='1.6'/%3E%3C/svg%3E") 11 11, nwse-resize;
   --cursor-nesw-resize: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17 5 L5 17 M12.5 5 H17 V9.5 M9.5 17 H5 V12.5' stroke='white' stroke-width='3.6'/%3E%3Cpath d='M17 5 L5 17 M12.5 5 H17 V9.5 M9.5 17 H5 V12.5' stroke='%231f2933' stroke-width='1.6'/%3E%3C/svg%3E") 11 11, nesw-resize;
+  /* A pointing finger (hotspot at the fingertip), over a shape a click would select. */
+  --cursor-pointer: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7.5 13.6 V4 a1.75 1.75 0 0 1 3.5 0 V10.5 a1.75 1.75 0 0 1 3.5 0 V11 a1.75 1.75 0 0 1 3.5 0 V12 a1.75 1.75 0 0 1 3.5 0 V15.5 c0 3.6 -2.6 6 -6.2 6 H13.2 c-2 0 -3.3 -0.7 -4.5 -2 L4.6 15.4 a1.6 1.6 0 0 1 2.4 -2.3 Z' stroke='white' stroke-width='3.6'/%3E%3Cpath d='M7.5 13.6 V4 a1.75 1.75 0 0 1 3.5 0 V10.5 a1.75 1.75 0 0 1 3.5 0 V11 a1.75 1.75 0 0 1 3.5 0 V12 a1.75 1.75 0 0 1 3.5 0 V15.5 c0 3.6 -2.6 6 -6.2 6 H13.2 c-2 0 -3.3 -0.7 -4.5 -2 L4.6 15.4 a1.6 1.6 0 0 1 2.4 -2.3 Z' fill='white' stroke='%231f2933' stroke-width='1.6'/%3E%3C/svg%3E") 8 2, pointer;
+  /* A curved double-headed arrow, for the rotate knob on the selection box. The heads are filled
+     triangles that extend past the arc's ends along its tangent, so they never overlap the body. */
+  --cursor-rotate: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 11 A7 7 0 0 1 17 11 M3.2 14 L7.23 12.34 L2.77 9.66 Z M18.8 14 L14.77 12.34 L19.23 9.66 Z' stroke='white' stroke-width='3.2' fill='white'/%3E%3Cpath d='M5 11 A7 7 0 0 1 17 11' stroke='%231f2933' stroke-width='1.6'/%3E%3Cpath d='M3.2 14 L7.23 12.34 L2.77 9.66 Z M18.8 14 L14.77 12.34 L19.23 9.66 Z' fill='%231f2933' stroke='%231f2933' stroke-width='0.6'/%3E%3C/svg%3E") 11 11, grab;
   font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   color: var(--black);
 }
@@ -64,12 +69,16 @@ svg.canvas.eraser .shape.erase-target .halo, svg.canvas.eraser .shape.erase-targ
 
 /* ---- shapes ---- */
 .shape { cursor: var(--cursor-move); }
+/* An unselected shape shows the pointing finger, since a click selects it (with gestures on, a drag
+   over it still draws, so a color gesture can fill it). :where() keeps it as weak as .shape, so the
+   tool cursors (hand, eraser, create, Shift-select) still win. */
+.shape:where(:not(.selected)) { cursor: var(--cursor-pointer); }
 /* The hover glow is a halo drawn behind the shape, outside its outline only (see ShapeView). */
 .shape .halo { display: none; }
 .shape:hover .halo { display: inline; }
 .canvas.mode-drawing .shape, .canvas.mode-menuOpen .shape { cursor: inherit; }
-/* Drawing with gestures, a drag over an unselected shape is a stroke (a color gesture fills it). */
-.canvas.gestures .shape:not(.selected) { cursor: inherit; }
+/* Mid-drag (moving shapes, or a line's end) the move cursor stays, whatever passes underneath. */
+.canvas.mode-dragging, .canvas.mode-dragging * { cursor: var(--cursor-move); }
 .canvas.mode-drawing .shape:hover .halo, .canvas.mode-menuOpen .shape:hover .halo { display: none; }
 
 .pulse {
@@ -95,9 +104,28 @@ svg.canvas.eraser .shape.erase-target .halo, svg.canvas.eraser .shape.erase-targ
   stroke: var(--accent);
   stroke-width: 1.5;
 }
-.handle-nw, .handle-se { cursor: var(--cursor-nwse-resize); }
-.handle-ne, .handle-sw { cursor: var(--cursor-nesw-resize); }
+/* Resize cursors follow each handle's direction, so they stay right when the box is turned. */
+.cur-ns { cursor: var(--cursor-ns-resize); }
+.cur-ew { cursor: var(--cursor-ew-resize); }
+.cur-nwse { cursor: var(--cursor-nwse-resize); }
+.cur-nesw { cursor: var(--cursor-nesw-resize); }
 .handle:hover { fill: var(--accent); }
+/* The rotate knob above the box: drawn small, grabbed from a wider invisible circle. */
+.rotate-stem { stroke: var(--accent); stroke-width: 1; pointer-events: none; }
+.rotate-grab { fill: transparent; pointer-events: all; }
+.rotate-knob { fill: #fff; stroke: var(--accent); stroke-width: 1.5; pointer-events: none; }
+.rotate-handle { cursor: var(--cursor-rotate); }
+.rotate-handle:hover .rotate-knob { fill: var(--accent); }
+.canvas.mode-rotating, .canvas.mode-rotating * { cursor: var(--cursor-rotate); }
+/* A selected line's ends: drag one to move it. */
+.end-grab { fill: transparent; pointer-events: all; }
+.end-knob { fill: #fff; stroke: var(--accent); stroke-width: 1.5; pointer-events: none; }
+.end-handle { cursor: var(--cursor-move); }
+.end-handle:hover .end-knob { fill: var(--accent); }
+/* Where a line's end or a shape's corner has snapped onto another line's end or corner. */
+.snap-ring { fill: rgba(62, 99, 221, 0.15); stroke: var(--accent); stroke-width: 1.5; pointer-events: none; }
+.canvas.mode-rotating .rotate-knob { fill: var(--accent); }
+.canvas.mode-rotating .shape:hover .halo { display: none; }
 
 /* ---- toast ---- */
 .toast {
@@ -444,6 +472,117 @@ button { font: inherit; color: inherit; }
 .fan-swatch:hover { transform: translate(var(--x), var(--y)) scale(1.12); }
 .fan-swatch.active { box-shadow: 0 0 0 2px var(--swatch), 0 3px 10px rgba(31, 41, 51, 0.18); }
 .fan-swatch.none.active { box-shadow: 0 0 0 2px var(--cancel), 0 3px 10px rgba(31, 41, 51, 0.18); }
+/* A key's swatch with a color dragged over it: dropping puts that color on the key. */
+.fan-swatch.slot-target { transform: translate(var(--x), var(--y)) scale(1.18); box-shadow: 0 0 0 2px var(--accent), 0 3px 10px rgba(31, 41, 51, 0.18); }
+/* The custom color button opens the editor: a rainbow ring around a plus. */
+.fan-swatch.custom {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: radial-gradient(circle, #fff 0 52%, transparent calc(52% + 0.5px)),
+    conic-gradient(#e5484d, #f5a524, #30a46c, #3e63dd, #8e4ec6, #e5484d);
+  color: var(--black);
+}
+.fan-swatch.custom svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+/* Saved colors sit in the outer row, a little smaller than the keys' swatches. */
+.fan-swatch.saved { transform: translate(var(--x), var(--y)) scale(0.85); }
+.fan-swatch.saved:hover { transform: translate(var(--x), var(--y)) scale(0.97); }
+
+/* ---- custom color editor (opens beside the swatches) ---- */
+.color-editor {
+  position: absolute;
+  right: 62px;
+  bottom: 0;
+  width: 220px;
+  padding: 10px 12px 12px;
+  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  box-shadow: 0 8px 24px rgba(31, 41, 51, 0.16);
+  font-size: 12px;
+  z-index: 3;
+  animation: pie-in 110ms ease-out;
+}
+.ce-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; }
+.ce-head b { flex: 1; }
+.ce-preview { width: 18px; height: 18px; border-radius: 50%; background: var(--swatch); box-shadow: 0 0 0 1px var(--panel-line); }
+.ce-preview.line { background: radial-gradient(circle, #fff 0 34%, var(--swatch) calc(34% + 0.5px)); }
+.ce-close, .ce-icon {
+  width: 26px; height: 26px; display: grid; place-items: center; padding: 0;
+  border: none; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer;
+}
+.ce-close:hover, .ce-icon:hover { background: rgba(31, 41, 51, 0.07); color: var(--black); }
+.ce-close svg, .ce-icon svg, .ce-save svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.ce-sv, .ce-hue { position: relative; border-radius: 8px; cursor: crosshair; touch-action: none; outline: none; }
+.ce-sv {
+  height: 120px;
+  background: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, var(--hue));
+}
+.ce-hue {
+  height: 14px;
+  margin-top: 10px;
+  border-radius: 999px;
+  background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+}
+.ce-sv:focus-visible, .ce-hue:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+.ce-thumb {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(31, 41, 51, 0.35), 0 1px 3px rgba(31, 41, 51, 0.3);
+  pointer-events: none;
+}
+.ce-hue .ce-thumb { top: 50%; }
+.ce-row { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+.ce-hex {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--panel-line);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.ce-hex:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(62, 99, 221, 0.2); }
+.ce-label { display: flex; justify-content: space-between; align-items: center; margin: 12px 0 6px; font-weight: 700; color: var(--muted); letter-spacing: 0.02em; }
+.ce-reset { padding: 0; border: none; background: none; font-size: 12px; font-weight: 600; color: var(--accent); cursor: pointer; }
+.ce-reset:hover { color: #23419f; }
+.ce-swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+.ce-swatch {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: var(--swatch);
+  box-shadow: 0 0 0 1px var(--panel-line);
+  cursor: pointer;
+  transition: transform 100ms;
+}
+.ce-swatch:hover:not(:disabled) { transform: scale(1.1); }
+.ce-swatch.same { box-shadow: 0 0 0 2px var(--swatch); }
+.ce-swatch.flash { animation: pulse 300ms ease-out; box-shadow: 0 0 0 2px var(--accent); }
+.ce-key { position: absolute; right: -5px; bottom: -5px; font-size: 9px; font-weight: 700; color: var(--muted); background: #fff; border-radius: 5px; padding: 0 3px; border: 1px solid var(--panel-line); }
+.ce-save { display: grid; place-items: center; background: #fff; border: 1px dashed rgba(31, 41, 51, 0.3); box-shadow: none; color: var(--muted); }
+.ce-save:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.ce-save:disabled { opacity: 0.4; cursor: default; }
+.ce-saved { position: relative; display: inline-flex; }
+.ce-remove {
+  position: absolute; top: -5px; right: -5px; width: 15px; height: 15px; padding: 0;
+  border: 1px solid var(--panel-line); border-radius: 50%; background: #fff;
+  font-size: 11px; line-height: 1; color: var(--muted); cursor: pointer; opacity: 0;
+}
+.ce-saved:hover .ce-remove, .ce-remove:focus-visible { opacity: 1; }
+.ce-remove:hover { background: #fbdcdc; color: #c62a2f; }
+
 .fan-key {
   position: absolute;
   right: -7px;
@@ -470,6 +609,9 @@ button { font: inherit; color: inherit; }
 }
 /* A stronger version of the hover halo; `svg.` outranks the rules that hide it in other modes. */
 svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo { display: inline; --halo-opacity: 0.8; }
+/* Around a closed shape the glow sits on one side of the outline only, so it is stronger than a line's to read as clearly. */
+.halo.closed { --halo-opacity: 0.75; }
+svg.canvas .shape.drop-target .halo.closed { --halo-opacity: 0.95; }
 
 /* ---- multi-select ---- */
 .selection-member {
@@ -547,8 +689,6 @@ svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo {
 /* A multi-selection's box is one target: it takes the move cursor and covers the members' hover glow. */
 .group-area { fill: transparent; pointer-events: all; cursor: var(--cursor-move); }
 .edge { fill: transparent; pointer-events: all; }
-.edge-n, .edge-s { cursor: var(--cursor-ns-resize); }
-.edge-e, .edge-w { cursor: var(--cursor-ew-resize); }
 .canvas.mode-selecting .shape:hover .halo { display: none; }
 /* Holding Shift (in the draw or select tool) means a drag box-selects, so show the select cursor. */
 .canvas.shift-select, .canvas.shift-select .shape, .canvas.shift-select .group-area { cursor: var(--cursor-crosshair); }
@@ -561,7 +701,7 @@ svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo {
 .canvas.mode-menuOpen.over-menu { cursor: pointer; }
 /* .shape and .group-area are named to match the three-class tool rules above (hand, eraser, shift). */
 .canvas.mode-menuOpen *, .canvas.mode-menuOpen .shape, .canvas.mode-menuOpen .group-area { cursor: inherit; }
-.canvas.mode-menuOpen .handle:hover { fill: #fff; }
+.canvas.mode-menuOpen .handle:hover, .canvas.mode-menuOpen .rotate-handle:hover .rotate-knob, .canvas.mode-menuOpen .end-handle:hover .end-knob { fill: #fff; }
 
 /* ---- gesture record mode (hidden: RECORD_MODE=true) ---- */
 .record {
@@ -1066,9 +1206,14 @@ svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo {
 .chat-save:disabled { opacity: 0.4; cursor: default; }
 
 /* While typing a message the pointer only aims: the marker below stands in for the cursor, and the
-   tools' cursors and hover glows are hidden. !important outranks every tool and modifier cursor. */
+   tools' cursors are hidden. !important outranks every tool and modifier cursor. */
 svg.canvas.aiming, svg.canvas.aiming * { cursor: none !important; }
+/* The shape under the pointer glows blue in any tool: it is what "this" will mean. The selection's
+   handles and box let the pointer through (a press there only ends typing), so the glow lands on the
+   same shape the assistant is told about, which looks through them too. */
+svg.canvas.aiming .selection * { pointer-events: none !important; }
 svg.canvas.aiming .shape .halo { display: none !important; }
+svg.canvas.aiming .shape:hover .halo { display: inline !important; --halo-color: var(--accent) !important; }
 
 /* Where "here" is while typing a message. */
 .here-marker {

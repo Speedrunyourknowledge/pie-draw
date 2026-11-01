@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import simplify from 'simplify-js';
-import { STROKE_WIDTH, canFill, dist, groupBounds, keepsAspect, makeFreehand, makePrimitive, makePrimitiveInBox, pointsBounds, scaleAbout, shapeInLasso, shapeNearPoint, shapeTouchesRect, worldBounds, type Bounds } from '../geometry';
+import { STROKE_WIDTH, anchorsOf, canFill, closestSnap, dist, isLine, lineEnds, lineWithEnds, frameOf, groupBounds, groupFrame, inFrame, makeFreehand, makePrimitive, makePrimitiveInBox, mustScaleEvenly, normAngle, pointsBounds, rotateAbout, rotatePt, scaleAbout, shapeInLasso, shapeNearPoint, shapeTouchesRect, snapAngle, snapSegment, type Anchor, type Bounds, type Frame } from '../geometry';
 import { describeAction, gestureFor, type GestureAction } from '../gestures/gestureConfig';
 import { CUSP_SPAN_PX, SCRIBBLE_HIT_PX, isScribble } from '../gestures/heuristics';
 import { PieMenu } from '../interaction/PieMenu';
@@ -18,12 +18,12 @@ import { menuFor, type PieItem } from '../interaction/pieMenuConfig';
 import { GhostTracker, interpret, overshot, shapeFromRecognized, type Recognized } from '../interaction/recognize';
 import { useChat } from '../ai/chat';
 import { useStore, type Tool } from '../store';
-import type { PrimitiveType, Pt, Shape } from '../types';
+import type { Freehand, PrimitiveType, Pt, Shape } from '../types';
 import { useKeyboard } from '../useKeyboard';
 import { isMac, isTextField, kbd } from '../platform';
 import { toScreen, toWorld } from '../view';
 import { GhostPreview } from './GhostPreview';
-import { SELECTION_PAD, SelectionHandles, type Corner } from './SelectionHandles';
+import { SELECTION_PAD, SelectionHandles, type Corner, type Handle } from './SelectionHandles';
 import { ShapeView } from './ShapeView';
 import { shapeCursor } from './shapeCursor';
 
@@ -31,6 +31,8 @@ const MOVE_THRESHOLD = 4; // px before a press becomes a drag or a stroke
 const HOLD_MS = 300; // left-press-and-hold opens the menu
 const SAMPLE_PX = 3; // freehand sampling distance
 const MIN_SIZE = 6; // smallest on-screen size a shape can be scaled to
+const DOUBLE_CLICK_MS = 400; // two clicks on the rotate knob this close together reset the angle
+const SNAP_PX = 10; // a line's end this close (on screen) to another line's end or a corner joins it
 const ERASE_STEP = 4; // px between hit tests along a fast eraser drag, so thin lines aren't skipped
 
 type Gesture =
@@ -45,11 +47,17 @@ type Gesture =
   | { kind: 'toolPress'; tool: 'hand' | 'eraser' | 'create'; start: Pt; screen: Pt; client: { x: number; y: number } }
   | { kind: 'pan'; last: Pt }
   | { kind: 'erase'; last: { x: number; y: number }; checkpointed: boolean }
-  | { kind: 'drag'; start: Pt; origs: Map<string, Pt> }
+  // anchors: the moving shapes' snap points where the drag began; targets: everyone else's.
+  | { kind: 'drag'; start: Pt; origs: Map<string, Pt>; anchors: Anchor[]; targets: Anchor[] }
+  // Dragging one end of a selected line; the other end (`fixed`) stays put.
+  | { kind: 'end'; line: Freehand; end: 0 | 1; fixed: Pt; targets: Anchor[]; screen: Pt; moved: boolean }
   | { kind: 'scale'; shapes: Shape[]; corner: Corner; moved: boolean }
+  // frame: the selection box when the drag began; start: the pointer's angle about its middle then.
+  | { kind: 'rotate'; shapes: Shape[]; frame: Frame; start: number; screen: Pt; moved: boolean }
   | { kind: 'create'; start: Pt; type: PrimitiveType; shape: Shape | null } // shape: as last drawn
   | { kind: 'marquee'; start: Pt; base: string[] } // box selection; base: selection it adds to
-  | { kind: 'draw'; points: Pt[]; check: number | null; tracker: GhostTracker } // check: pending frame
+  // check: pending frame. line: Shift is down, so the stroke is a straight line from its start to `last`.
+  | { kind: 'draw'; points: Pt[]; check: number | null; tracker: GhostTracker; line: boolean; last: Pt }
   | { kind: 'menu' } // button held while the menu tracks the pointer
   | { kind: 'swallow' }; // ignore the rest of a press that closed a sticky menu
 
@@ -66,11 +74,9 @@ interface MenuState {
 function hitShapeId(target: EventTarget | null): string | null {
   return (target as Element | null)?.closest?.('[data-id]')?.getAttribute('data-id') ?? null;
 }
-/** Whether a world point falls inside a shape's selection box (including its padding). */
+/** Whether a world point falls inside a shape's selection box (including its padding), turned with it. */
 function inSelectionBox(s: Shape, w: Pt, zoom: number): boolean {
-  const b = worldBounds(s);
-  const pad = SELECTION_PAD / zoom;
-  return w[0] >= b.minX - pad && w[0] <= b.maxX + pad && w[1] >= b.minY - pad && w[1] <= b.maxY + pad;
+  return inFrame(frameOf(s), w, SELECTION_PAD / zoom);
 }
 /** The shape under a viewport point, for gestures (the eraser) that hit-test away from e.target. */
 function shapeIdAt(x: number, y: number): string | null {
@@ -85,26 +91,35 @@ function shapeIdBelow(x: number, y: number): string | null {
   return null;
 }
 const isGroupArea = (target: EventTarget | null) => !!(target as Element | null)?.hasAttribute?.('data-group');
-function hitHandle(target: EventTarget | null): Corner | null {
-  return ((target as Element | null)?.getAttribute?.('data-handle') as Corner | null) ?? null;
+function hitHandle(target: EventTarget | null): Handle | null {
+  return ((target as Element | null)?.closest?.('[data-handle]')?.getAttribute('data-handle') as Handle | null) ?? null;
 }
 
+/** The pointer's direction from a point, in degrees clockwise from east. */
+const angleFrom = (c: Pt, p: Pt) => (Math.atan2(p[1] - c[1], p[0] - c[0]) * 180) / Math.PI;
+/** A new draw gesture starting at `start`. */
+const newStroke = (start: Pt): Gesture => ({ kind: 'draw', points: [start], check: null, tracker: new GhostTracker(), line: false, last: start });
+
 /**
- * New translate/scale for dragging a corner or edge of the shapes' joint box to `p`, with the opposite
+ * New translate/scale for dragging a corner or edge of the shapes' box to `p`, with the opposite
  * corner or edge fixed. An edge scales one axis, or both evenly (about the edge's middle) when locked.
+ * The box may be turned (one rotated shape), so the pointer is measured along the box's own axes.
  */
 function scaleFromCorner(shapes: Shape[], corner: Corner, p: Pt, lock: boolean) {
-  const b = groupBounds(shapes);
+  const f = groupFrame(shapes);
+  const [qx, qy] = rotatePt(p, [f.cx, f.cy], -f.angle);
+  const q: Pt = [qx - f.cx, qy - f.cy]; // the pointer relative to the box's middle, upright
+  const b = { minX: -f.w / 2, maxX: f.w / 2, minY: -f.h / 2, maxY: f.h / 2 };
   const movesX = corner.includes('e') || corner.includes('w');
   const movesY = corner.includes('n') || corner.includes('s');
   const cx = corner.includes('e') ? b.maxX : b.minX;
-  const ax = !movesX ? (b.minX + b.maxX) / 2 : corner.includes('e') ? b.minX : b.maxX;
+  const ax = !movesX ? 0 : corner.includes('e') ? b.minX : b.maxX;
   const cy = corner.includes('s') ? b.maxY : b.minY;
-  const ay = !movesY ? (b.minY + b.maxY) / 2 : corner.includes('s') ? b.minY : b.maxY;
-  const w = b.maxX - b.minX, h = b.maxY - b.minY;
+  const ay = !movesY ? 0 : corner.includes('s') ? b.minY : b.maxY;
+  const w = f.w, h = f.h;
 
-  let kx = movesX && w > 1e-6 ? (p[0] - ax) / (cx - ax) : 1;
-  let ky = movesY && h > 1e-6 ? (p[1] - ay) / (cy - ay) : 1;
+  let kx = movesX && w > 1e-6 ? (q[0] - ax) / (cx - ax) : 1;
+  let ky = movesY && h > 1e-6 ? (q[1] - ay) / (cy - ay) : 1;
   const minKx = w > 1e-6 ? MIN_SIZE / w : 1;
   const minKy = h > 1e-6 ? MIN_SIZE / h : 1;
   if (lock) {
@@ -115,7 +130,8 @@ function scaleFromCorner(shapes: Shape[], corner: Corner, p: Pt, lock: boolean) 
     kx = Math.max(kx, minKx);
     ky = Math.max(ky, minKy);
   }
-  return scaleAbout(shapes, ax, ay, kx, ky);
+  const [wx, wy] = rotatePt([f.cx + ax, f.cy + ay], [f.cx, f.cy], f.angle);
+  return scaleAbout(shapes, wx, wy, kx, ky, f.angle);
 }
 
 /** The box between two canvas points. */
@@ -130,6 +146,10 @@ function boxOf(a: Pt, b: Pt): Bounds {
 
 interface StatusInput {
   menu: MenuState | null;
+  rotation: number | null; // the selection box's angle while it is being turned
+  movingEnd: boolean; // dragging a line's end
+  lineSelected: boolean; // the selection is one straight line
+  line: boolean; // drawing a straight line (Shift held mid-stroke)
   spaceHeld: boolean;
   mode: string;
   selectionCount: number;
@@ -138,13 +158,18 @@ interface StatusInput {
 }
 
 /** One line of context-sensitive guidance, so the available actions are never a mystery. */
-function statusText({ menu, mode, selectionCount, tool, createType }: StatusInput) {
+function statusText({ menu, rotation, movingEnd, lineSelected, line, mode, selectionCount, tool, createType }: StatusInput) {
   if (menu) return 'Select an option · Click the center or outside the menu to cancel';
   if (mode === 'scaling') return 'Hold Shift to keep proportions';
+  if (movingEnd) return 'Snaps to other line ends, shape corners, and 45° steps when close';
+  if (rotation !== null) return `${Math.round(normAngle(rotation))}° · Snaps to 45° steps when close · Double-click the handle to reset`;
   if (mode === 'selecting') return 'Every shape the box touches is selected · Release to finish';
   if (tool === 'create') {
     if (mode === 'drawing') return 'Release to finish · Hold Shift for equal sides';
     return `Drag to draw the ${createType} · Click to place one · Press Esc to cancel`;
+  }
+  if (mode === 'drawing') {
+    return line ? 'Straight line · Snaps to line ends, shape corners and 45° steps · Release Shift to draw freely' : 'Hold Shift for a straight line';
   }
   if (tool === 'hand') return 'Drag to pan · Press Esc to exit Pan mode';
   if (tool === 'eraser') return 'Click or drag across shapes to erase them · Press Esc to exit Erase mode';
@@ -152,8 +177,9 @@ function statusText({ menu, mode, selectionCount, tool, createType }: StatusInpu
     if (selectionCount > 0) return `Drag empty space to select again · Drag the selection to move · Press Esc to exit Select mode`;
     return `Drag a box to select shapes · ${kbd('mod')}-click to add or remove · Press Esc to exit Select mode`;
   }
+  if (lineSelected) return 'Drag to move · Drag an end to reshape · Right-click for more options';
   if (selectionCount > 0) {
-    return `Drag to move · Drag edges or corners to scale · ${kbd('mod')}-click to add or remove · Right-click for more options`;
+    return `Drag to move · Drag edges or corners to scale · Drag the round handle to rotate · Right-click for more options`;
   }
   return 'Right-click or left-press-and-hold for the menu · Drag to draw · Shift-drag to select';
 }
@@ -176,6 +202,7 @@ export function Canvas() {
   const timer = useRef<number | undefined>(undefined);
   const spaceRef = useRef(false); // Space held: drag pans the view
   const hoverRef = useRef<Pt | null>(null); // last pointer position over the canvas, where M opens the menu
+  const knobClick = useRef(0); // when the rotate knob was last clicked, to catch a double-click
 
   // Render mirrors of the refs above (the refs are the source of truth inside handlers).
   const [menu, setMenu] = useState<MenuState | null>(null);
@@ -189,6 +216,10 @@ export function Canvas() {
   const [panning, setPanning] = useState(false); // middle-button / Space drag in progress
   const [eraseTargetId, setEraseTargetId] = useState<string | null>(null); // shape under the eraser
   const [marquee, setMarquee] = useState<Bounds | null>(null); // box selection in progress, canvas coordinates
+  const [turning, setTurning] = useState<Frame | null>(null); // the selection box while it is being rotated
+  const [lineMode, setLineMode] = useState(false); // the stroke in progress is a straight line
+  const [snapRings, setSnapRings] = useState<Pt[]>([]); // where a line's end or a corner has just snapped
+  const [movingEnd, setMovingEnd] = useState(false); // a line's end is being dragged
 
   const selected = shapes.filter((s) => selectedIds.includes(s.id));
 
@@ -304,11 +335,19 @@ export function Canvas() {
 
   // ---- freehand ----
 
-  const finishStroke = (points: Pt[], shown: Recognized | null) => {
+  const finishStroke = (points: Pt[], shown: Recognized | null, line: Pt[] | null) => {
     const st = useStore.getState();
     setStroke(null);
     setGhost(null);
     setLassoHits(null);
+    setLineMode(false);
+    if (line) {
+      // A straight line is always ink: never a gesture, never a recognized shape.
+      if (dist(line[0], line[1]) * st.view.zoom < MOVE_THRESHOLD) return;
+      st.select(null);
+      st.addShape(makeFreehand(line, st.currentColor, true), false);
+      return;
+    }
     if (points.length < 2) return;
     // A scribble over shapes erases them. One that touches no shape falls through like any stroke.
     if (st.gesturesOn && isScribble(points, CUSP_SPAN_PX / st.view.zoom)) {
@@ -386,15 +425,16 @@ export function Canvas() {
         return true;
       }
       case 'setColor': {
-        const name = describeAction(action);
+        const name = describeAction(action, st.palette);
+        const color = st.palette[action.slot]; // whatever color is on that key now
         // Started inside an unselected shape: fill it (the topmost one there).
         const target = st.shapes.findLast((s) => canFill(s) && !st.selectedIds.includes(s.id) && shapeNearPoint(s, points[0], 0));
         if (target) {
-          st.refill(target.id, action.color);
+          st.refill(target.id, color);
           st.showToast(`Fill: ${name}`);
           pulse(target.id);
         } else {
-          st.setColor(action.color);
+          st.setColor(color);
           st.showToast(st.selectedIds.length > 0 ? `Line color: ${name}` : `Line color for new shapes: ${name}`);
         }
         return true;
@@ -428,6 +468,48 @@ export function Canvas() {
       g.checkpointed = true;
     }
     st.eraseShape(id);
+  };
+
+  // ---- straight lines and snapping ----
+
+  /** The snap points of every shape except these. */
+  const anchorsExcept = (skip: string[]) =>
+    useStore.getState().shapes.filter((s) => !skip.includes(s.id)).flatMap(anchorsOf);
+
+  /**
+   * Where a line's end at `p` goes: onto a nearby line end or shape corner if there is one, else onto
+   * a 45° step from the other end `from` when close to one, else where it is.
+   */
+  const placeEnd = (p: Pt, from: Pt | null, targets: Anchor[]): { p: Pt; snapped: boolean } => {
+    const hit = closestSnap([{ p, end: true }], targets, SNAP_PX / useStore.getState().view.zoom);
+    if (hit) return { p: hit.to, snapped: true };
+    return { p: from ? snapSegment(from, p) : p, snapped: false };
+  };
+
+  /** The straight line a Shift stroke makes: both ends snapped, with rings where they joined something. */
+  const lineOf = (g: Extract<Gesture, { kind: 'draw' }>): [Pt, Pt] => {
+    const targets = anchorsExcept([]);
+    const a = placeEnd(g.points[0], null, targets);
+    const b = placeEnd(g.last, a.p, targets);
+    setSnapRings([a, b].filter((x) => x.snapped).map((x) => x.p));
+    return [a.p, b.p];
+  };
+
+  /**
+   * Holding Shift mid-stroke turns the stroke into a straight line from where it began to the pointer
+   * (snapping to 45° steps when close); letting go of Shift goes back to the freehand stroke.
+   */
+  const showLine = (g: Extract<Gesture, { kind: 'draw' }>, on: boolean) => {
+    g.line = on;
+    setLineMode(on);
+    if (on) {
+      setGhost(g.tracker.clear());
+      setLassoHits(null);
+      setStroke(lineOf(g));
+    } else {
+      setStroke(g.points.slice());
+      setSnapRings([]);
+    }
   };
 
   // ---- the single pointer-event router ----
@@ -485,10 +567,43 @@ export function Canvas() {
       return;
     }
 
-    const corner = hitHandle(e.target);
-    if (corner && sel.length > 0) {
-      gesture.current = { kind: 'scale', shapes: sel, corner, moved: false };
+    const handle = hitHandle(e.target);
+    if ((handle === 'end0' || handle === 'end1') && sel.length === 1 && isLine(sel[0])) {
+      const end = handle === 'end0' ? 0 : 1;
+      const line = sel[0];
+      gesture.current = { kind: 'end', line, end, fixed: lineEnds(line)[1 - end], targets: anchorsExcept([line.id]), screen: p, moved: false };
+      st.setMode('dragging');
+      return;
+    }
+    if (handle === 'rotate' && sel.length > 0) {
+      if (e.timeStamp - knobClick.current < DOUBLE_CLICK_MS) {
+        // Double-click the knob: stand the shapes back upright.
+        knobClick.current = 0;
+        st.setRotation(0);
+        gesture.current = { kind: 'swallow' };
+        return;
+      }
+      knobClick.current = e.timeStamp;
+      const frame = groupFrame(sel);
+      gesture.current = { kind: 'rotate', shapes: sel, frame, start: angleFrom([frame.cx, frame.cy], w), screen: p, moved: false };
+      st.setMode('rotating');
+      setTurning(frame);
+      return;
+    }
+    if (handle && handle !== 'rotate' && handle !== 'end0' && handle !== 'end1' && sel.length > 0) {
+      gesture.current = { kind: 'scale', shapes: sel, corner: handle, moved: false };
       st.setMode('scaling');
+      return;
+    }
+
+    // A drag that starts on the end of an unselected line draws from that end (hold Shift for a
+    // straight line), so lines can be chained. A click there still selects the line.
+    const pressed = st.tool === 'draw' && !additive && shapeId && !st.selectedIds.includes(shapeId)
+      ? st.shapes.find((s) => s.id === shapeId) : undefined;
+    const fromEnd = pressed && isLine(pressed) ? lineEnds(pressed).find((q) => dist(q, w) * st.view.zoom <= SNAP_PX) : undefined;
+    if (pressed && fromEnd) {
+      gesture.current = { kind: 'strokeOver', start: fromEnd, screen: p, shapeId: pressed.id };
+      startHold(p, shapeId);
       return;
     }
 
@@ -572,7 +687,7 @@ export function Canvas() {
       case 'strokeOver':
         if (dist(p, g.screen) < MOVE_THRESHOLD) return;
         clearTimer();
-        gesture.current = { kind: 'draw', points: [g.start], check: null, tracker: new GhostTracker() };
+        gesture.current = newStroke(g.start);
         st.setMode('drawing');
         onPointerMove(e);
         return;
@@ -583,22 +698,41 @@ export function Canvas() {
           gesture.current = { kind: 'marquee', start: g.start, base: g.additive ? st.selectedIds : [] };
           st.setMode('selecting');
         } else if (g.shapeId) {
-          const origs = new Map<string, Pt>(
-            st.shapes.filter((s) => st.selectedIds.includes(s.id)).map((s) => [s.id, [s.x, s.y]]),
-          );
+          const moving = st.shapes.filter((s) => st.selectedIds.includes(s.id));
+          const origs = new Map<string, Pt>(moving.map((s) => [s.id, [s.x, s.y]]));
           st.checkpoint();
-          gesture.current = { kind: 'drag', start: g.start, origs };
+          gesture.current = { kind: 'drag', start: g.start, origs, anchors: moving.flatMap(anchorsOf), targets: anchorsExcept(st.selectedIds) };
           st.setMode('dragging');
         } else {
-          gesture.current = { kind: 'draw', points: [g.start], check: null, tracker: new GhostTracker() };
+          gesture.current = newStroke(g.start);
           st.setMode('drawing');
         }
         onPointerMove(e);
         return;
       }
       case 'drag': {
-        const dx = w[0] - g.start[0], dy = w[1] - g.start[1];
+        let dx = w[0] - g.start[0], dy = w[1] - g.start[1];
+        // A moved line's ends, or a moved shape's corners, pull the whole selection onto a nearby line end.
+        const moved = g.anchors.map((a): Anchor => ({ p: [a.p[0] + dx, a.p[1] + dy], end: a.end }));
+        const hit = closestSnap(moved, g.targets, SNAP_PX / st.view.zoom);
+        if (hit) {
+          dx += hit.to[0] - hit.from[0];
+          dy += hit.to[1] - hit.from[1];
+        }
+        setSnapRings(hit ? [hit.to] : []);
         st.updateShapes(new Map([...g.origs].map(([id, [x, y]]) => [id, { x: x + dx, y: y + dy }])));
+        return;
+      }
+      case 'end': {
+        if (!g.moved) {
+          if (dist(p, g.screen) < MOVE_THRESHOLD) return;
+          st.checkpoint();
+          g.moved = true;
+          setMovingEnd(true);
+        }
+        const q = placeEnd(w, g.fixed, g.targets);
+        st.putShape(lineWithEnds(g.line, g.end === 0 ? q.p : g.fixed, g.end === 0 ? g.fixed : q.p));
+        setSnapRings(q.snapped ? [q.p] : []);
         return;
       }
       case 'scale': {
@@ -607,8 +741,22 @@ export function Canvas() {
           g.moved = true;
         }
         // Squares and circles can't stretch, so a selection holding one keeps its proportions.
-        const lock = e.shiftKey || g.shapes.some(keepsAspect);
+        const lock = e.shiftKey || mustScaleEvenly(g.shapes);
         st.updateShapes(scaleFromCorner(g.shapes, g.corner, w, lock));
+        return;
+      }
+      case 'rotate': {
+        if (!g.moved) {
+          if (dist(p, g.screen) < MOVE_THRESHOLD) return; // still a click (maybe half a double-click)
+          st.checkpoint();
+          g.moved = true;
+          knobClick.current = 0; // a turn, not the first half of a double-click
+        }
+        const f = g.frame;
+        // The box's new angle, pulled onto a 45° step when it comes close to one.
+        const angle = snapAngle(f.angle + normAngle(angleFrom([f.cx, f.cy], w) - g.start));
+        st.updateShapes(rotateAbout(g.shapes, f.cx, f.cy, angle - f.angle));
+        setTurning({ ...f, angle });
         return;
       }
       case 'create':
@@ -624,12 +772,16 @@ export function Canvas() {
         return;
       }
       case 'draw': {
+        g.last = w;
+        if (e.shiftKey || g.line) showLine(g, e.shiftKey);
         if (dist(w, g.points[g.points.length - 1]) * st.view.zoom < SAMPLE_PX) return;
-        g.points.push(w);
+        g.points.push(w); // kept while Shift is down too, so letting go of it resumes the freehand stroke
+        if (g.line) return;
         // Recognize at most once per frame, on the stroke as it is when the frame comes.
         if (st.gesturesOn) g.check ??= requestAnimationFrame(() => {
           g.check = null;
           if (gesture.current !== g) return; // stroke already finished
+          if (g.line) return;
           const it = interpret(g.points);
           setGhost(overshot(g.points) ? g.tracker.clear() : g.tracker.update(it?.shape ?? null));
           // A recognized lasso is tinted, with the shapes it would select outlined.
@@ -677,7 +829,18 @@ export function Canvas() {
         return; // mode is managed by the menu
       case 'draw':
         if (g.check !== null) cancelAnimationFrame(g.check);
-        finishStroke(g.points, g.tracker.shown);
+        finishStroke(g.points, g.tracker.shown, g.line ? lineOf(g) : null);
+        setSnapRings([]);
+        break;
+      case 'drag':
+        setSnapRings([]);
+        break;
+      case 'end':
+        setSnapRings([]);
+        setMovingEnd(false);
+        break;
+      case 'rotate':
+        setTurning(null);
         break;
     }
     if (!menuRef.current) useStore.getState().setMode('idle');
@@ -692,6 +855,10 @@ export function Canvas() {
     setGhost(null);
     setLassoHits(null);
     setDraft(null);
+    setTurning(null);
+    setLineMode(false);
+    setSnapRings([]);
+    setMovingEnd(false);
     closeMenu();
   };
 
@@ -790,6 +957,7 @@ export function Canvas() {
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.key === 'Shift') setShiftHeld(true);
+      if (e.key === 'Shift' && gesture.current.kind === 'draw') showLine(gesture.current, true);
       if (e.code === 'Space' && !e.repeat && !isTextField(e.target)) {
         spaceRef.current = true;
         setSpaceHeld(true);
@@ -798,6 +966,7 @@ export function Canvas() {
     };
     const up = (e: KeyboardEvent) => {
       if (e.key === 'Shift') setShiftHeld(false);
+      if (e.key === 'Shift' && gesture.current.kind === 'draw') showLine(gesture.current, false);
       if (e.code === 'Space') {
         spaceRef.current = false;
         setSpaceHeld(false);
@@ -858,8 +1027,12 @@ export function Canvas() {
             It stays up while drawing, since a gesture stroke (copy, cut, color...) acts on it, but not
             while the create tool drags out a new shape. */}
         {selected.length > 0 && !(mode === 'drawing' && tool === 'create') && (
-          <SelectionHandles shapes={selected} view={view} preview={mode === 'selecting'} />
+          <SelectionHandles shapes={selected} view={view} preview={mode === 'selecting'} frame={turning} />
         )}
+        {snapRings.map((q, i) => {
+          const [x, y] = toScreen(q, view);
+          return <circle key={i} className="snap-ring" cx={x} cy={y} r={8} />;
+        })}
         {lassoHits && lassoHits.length > 0 && <SelectionHandles shapes={lassoHits} view={view} preview />}
         {marquee && (() => {
           const [x0, y0] = toScreen([marquee.minX, marquee.minY], view);
@@ -888,7 +1061,7 @@ export function Canvas() {
         </div>
       )}
       <div className="status">
-        {statusText({ menu, spaceHeld: spaceHeld || panning, mode, selectionCount: selected.length, tool, createType })}
+        {statusText({ menu, rotation: turning?.angle ?? null, movingEnd, lineSelected: selected.length === 1 && isLine(selected[0]), line: lineMode, spaceHeld: spaceHeld || panning, mode, selectionCount: selected.length, tool, createType })}
       </div>
     </>
   );

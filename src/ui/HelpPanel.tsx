@@ -13,9 +13,10 @@ const KEYS: [string, string][] = [
   ['M', 'Open / close the menu'],
   ['Tab  /  Shift+Tab', 'Select the next / previous shape'],
   [kbd('mod+a'), 'Select all shapes'],
-  ['1 – 5', 'Line color'],
+  ['1 – 5', 'Line color (the colors on keys 1–5 can be changed)'],
   ['Shift+1 – 5  /  Shift+0', 'Fill color'],
   ['Arrow keys', 'Nudge selection, or pan when nothing is selected'],
+  ['R  /  Shift+R', 'Rotate selection 90° clockwise / counterclockwise'],
   ['V', 'Select tool on / off'],
   ['H', 'Hand tool on / off'],
   ['E', 'Eraser tool on / off'],
@@ -69,7 +70,7 @@ export function HelpPanel() {
             <li>The <b>File</b> menu at the top allows you to save and open your drawings.</li>
             <li>
               <b>Assistant:</b> Click <b>Assistant</b> in the top bar (or press <Key>/</Key>) to interact with an AI assistant.
-              After typing, <b>point with the mouse</b> to indicate “here” or “this”, then press <b>Enter</b>.
+              After typing, <b>point with the mouse</b> to indicate “here” or “this” (the shape “this” means glows blue), then press <b>Enter</b>.
             </li>
             <li>
               <b>Gestures:</b> With Gestures on (top bar, or <Key>G</Key>), single strokes create shapes, select, copy, paste, set colors and delete.{' '}
@@ -84,8 +85,11 @@ export function HelpPanel() {
             <ul className="help-list">
               <li><b>Choose a shape from the menu</b> and the pointer becomes a crosshair showing that shape. <b>Drag</b> to draw it at any size (Shift keeps the sides equal), or <b>click</b> to place it at a standard size.</li>
               <li><b>Click and drag on empty space</b> to sketch. Sketch a shape and a faded preview will appear if the shape is recognized.</li>
+              <li><b>Hold Shift while sketching</b> for a straight line. It snaps to horizontal, vertical and 45° when close; let go of Shift to keep sketching freely.</li>
+              <li><b>Line ends snap together.</b> A selected line shows its two ends; drag one to reshape the line. Ends snap onto other lines' ends and onto the corners of squares, rectangles and triangles, and moving one of those shapes snaps its corners onto line ends. Drag from the end of a line to draw onward from it.</li>
               <li><b>Click</b> a shape to select it, then <b>drag</b> to move it.</li>
               <li><b>Drag a corner or edge</b> of the selection box to scale (Shift keeps proportions), or <b>pinch</b> on a trackpad.</li>
+              <li><b>Drag the round handle</b> above the selection box to rotate. It snaps to 45° steps when close, and any other angle works too. <b>Double-click</b> it to stand the shape upright again.</li>
             </ul>
             <h3>Select Several Shapes</h3>
             <ul className="help-list">
@@ -98,6 +102,8 @@ export function HelpPanel() {
               <li>Two swatches in the lower right: <b>Line</b> (the ring) and <b>Fill</b> (the disc; a red slash means no fill). They show the selected shape's colors, or what new shapes will get.</li>
               <li><b>Click one</b> to fan out the colors, then click one. Keys <Key>1</Key>–<Key>5</Key> set the line, <Key>Shift</Key>+<Key>1</Key>–<Key>5</Key> the fill, <Key>Shift</Key>+<Key>0</Key> removes it.</li>
               <li><b>Drag a swatch onto any shape</b> to paint it directly. Freehand lines have a line color only.</li>
+              <li><b>Any color:</b> the rainbow <b>+</b> in the fan opens a color editor. Changes show on the selection as you drag. From there, put the color on a key (1–5) or save it.</li>
+              <li><b>Saved colors</b> sit in the fan's outer row. <b>Drag any color onto a numbered swatch</b> to put it on that key. Drag one numbered swatch onto another to swap them.</li>
             </ul>
             <h3>Move Around</h3>
             <ul className="help-list">
