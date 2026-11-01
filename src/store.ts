@@ -104,8 +104,11 @@ interface AppState {
    * setFill but without a history entry. Pair with checkpoint() before the first change.
    */
   paintLive: (kind: 'line' | 'fill', color: string | null) => void;
-  /** Puts a color on key 1–5 (slot 0–4). */
-  setPaletteSlot: (slot: number, color: string) => void;
+  /**
+   * Puts a color on key 1–5 (slot 0–4). A color is only ever on one key: if it is already on
+   * another key, the two keys swap instead, and that other slot is returned (otherwise null).
+   */
+  setPaletteSlot: (slot: number, color: string) => number | null;
   /** Exchanges the colors on two keys. */
   swapPaletteSlots: (a: number, b: number) => void;
   resetPalette: () => void;
@@ -332,9 +335,13 @@ export const useStore = create<AppState>()((set, get) => {
     },
 
     setPaletteSlot: (slot, color) => {
-      const palette = get().palette.map((c, i) => (i === slot ? color : c));
+      const palette = [...get().palette];
+      const other = palette.findIndex((c, i) => i !== slot && c.toLowerCase() === color.toLowerCase());
+      if (other !== -1) palette[other] = palette[slot];
+      palette[slot] = color;
       storePalette(palette);
       set({ palette });
+      return other === -1 ? null : other;
     },
 
     swapPaletteSlots: (a, b) => {

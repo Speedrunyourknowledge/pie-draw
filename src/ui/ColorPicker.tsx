@@ -140,8 +140,8 @@ export function ColorPicker({ kind }: { kind: Kind }) {
       if (key !== null && d.color) {
         // The fan stays open, so the new key color can be seen (and used) right away.
         if (d.slot === null) {
-          st.setPaletteSlot(key, d.color);
-          st.showToast(`Key ${key + 1}: ${colorLabel(d.color)}`);
+          const other = st.setPaletteSlot(key, d.color);
+          st.showToast(other === null ? `Key ${key + 1}: ${colorLabel(d.color)}` : `Swapped keys ${other + 1} and ${key + 1}`);
         } else if (d.slot !== key) {
           st.swapPaletteSlots(d.slot, key);
           st.showToast(`Swapped keys ${d.slot + 1} and ${key + 1}`);
@@ -185,7 +185,7 @@ export function ColorPicker({ kind }: { kind: Kind }) {
           return (
             <button
               key={c.slot ?? 'none'}
-              className={`fan-swatch ${kind} ${c.value ? '' : 'none'} ${c.value === shown && !mixed ? 'active' : ''} ${c.slot !== null && c.slot === slotTarget ? 'slot-target' : ''}`}
+              className={`fan-swatch ${kind} ${c.value ? '' : 'none'} ${c.slot !== null && c.slot === slotTarget ? 'slot-target' : ''}`}
               style={{ '--swatch': c.value ?? '#fff', ...place(a, fanR) } as React.CSSProperties}
               data-slot={c.slot ?? undefined}
               data-tip-side="left"
@@ -223,7 +223,7 @@ export function ColorPicker({ kind }: { kind: Kind }) {
         swatches.map((c, j) => (
           <button
             key={c}
-            className={`fan-swatch ${kind} saved ${c === shown && !mixed ? 'active' : ''}`}
+            className={`fan-swatch ${kind} saved`}
             style={{ '--swatch': c, ...outerAt(j + 1) } as React.CSSProperties}
             data-tip-side="left"
             data-tip={`Saved: ${c.toUpperCase()} · Drag onto a key to use it with 1–5`}

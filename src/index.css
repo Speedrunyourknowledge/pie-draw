@@ -491,8 +491,6 @@ button { font: inherit; color: inherit; }
 .fan-swatch.fill { top: 4px; } /* centered on the button, so every swatch is the same distance away */
 .fan-swatch.line { top: calc(4px + 2px); left: calc(4px + 8px); }
 .fan-swatch:hover { transform: translate(var(--x), var(--y)) scale(1.12); }
-.fan-swatch.active { box-shadow: 0 0 0 2px var(--swatch), 0 3px 10px rgba(31, 41, 51, 0.18); }
-.fan-swatch.none.active { box-shadow: 0 0 0 2px var(--cancel), 0 3px 10px rgba(31, 41, 51, 0.18); }
 /* A key's swatch with a color dragged over it: dropping puts that color on the key. */
 .fan-swatch.slot-target { transform: translate(var(--x), var(--y)) scale(1.18); box-shadow: 0 0 0 2px var(--accent), 0 3px 10px rgba(31, 41, 51, 0.18); }
 /* The custom color button opens the editor: a rainbow ring around a plus. */

@@ -19,7 +19,6 @@ const SCRIBBLE: Pt[] = [[14, 22], [50, 18], [12, 32], [52, 28], [14, 42], [50, 3
 export function GestureGuide() {
   const open = useStore((s) => s.gestureGuideOpen);
   const swapped = useStore((s) => s.panelSwapped);
-  const palette = useStore((s) => s.palette);
   const close = () => useStore.getState().setGestureGuideOpen(false);
   if (!open) return null;
 
@@ -35,7 +34,7 @@ export function GestureGuide() {
             <svg viewBox="0 0 20 20"><path d="M5 5 L15 15 M15 5 L5 15" /></svg>
           </button>
         </header>
-        <GestureList palette={palette} />
+        <GestureList />
       </div>
     </div>
   );
@@ -45,8 +44,9 @@ export function GestureGuide() {
  * Every gesture and what it does, built from the gesture config and recorded samples. Kept apart from
  * the panel, which reads the store, so `npm run docs:gestures` can render it for the README.
  */
-/** `palette`: the colors on keys 1–5, which the number gestures apply (the defaults in the README). */
-export function GestureList({ palette = DEFAULT_PALETTE }: { palette?: readonly string[] }) {
+/** The number gestures are shown with the default key colors, not whatever the user has put on keys 1–5. */
+export function GestureList() {
+  const palette = DEFAULT_PALETTE;
   return (
     <>
       <p>

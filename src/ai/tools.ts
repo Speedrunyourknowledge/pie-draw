@@ -790,7 +790,8 @@ function run(name: string, input: Record<string, unknown>, pointing: Pointing): 
       const key = Math.round(number(input, 'key'));
       if (key < 1 || key > 5) throw new InputError('key must be 1-5');
       const value = color(input, 'color')!;
-      st.setPaletteSlot(key - 1, value);
+      const other = st.setPaletteSlot(key - 1, value);
+      if (other !== null) return { result: `${colorName(value)} was already on key ${other + 1}, so keys ${other + 1} and ${key} swapped` };
       return { result: `Key ${key} is now ${colorName(value)}` };
     }
 
