@@ -276,8 +276,9 @@ export function Canvas() {
 
   const openMenu = (origin: Pt, shapeId: string | null) => {
     const st = useStore.getState();
-    // On a shape in the selection the menu acts on the whole selection; otherwise on just that shape.
-    if (!shapeId || !st.selectedIds.includes(shapeId)) st.select(shapeId);
+    // On a shape outside the selection the menu acts on just that shape. On a shape in the selection,
+    // or on empty space while something is selected, it acts on the whole selection.
+    if (shapeId && !st.selectedIds.includes(shapeId)) st.select(shapeId);
     st.setMode('menuOpen');
     const { shapes, selectedIds } = useStore.getState();
     menuRef.current = {
@@ -720,7 +721,9 @@ export function Canvas() {
       return;
     }
     // Pressing a shape that is already selected keeps the whole selection, so it can be dragged.
-    if (!shapeId || !st.selectedIds.includes(shapeId)) st.select(shapeId);
+    // Pressing empty space keeps it too until release, so a hold there opens the selection's menu;
+    // a click clears it on release and a drag starts a fresh box selection.
+    if (shapeId && !st.selectedIds.includes(shapeId)) st.select(shapeId);
     gesture.current = { kind: 'press', start: w, screen: p, shapeId, additive };
     startHold(p, shapeId);
   };
