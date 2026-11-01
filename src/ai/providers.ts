@@ -113,7 +113,7 @@ function anthropicError(SDK: typeof Anthropic, e: unknown): unknown {
 // ---- Anthropic (Claude) ----
 
 /** How much the model thinks before acting: low, medium, high, xhigh or max. */
-const EFFORT = 'medium';
+const EFFORT = 'high';
 
 /**
  * Whether the model takes adaptive thinking (Claude 4.6 and later; Haiku from 5). Older models

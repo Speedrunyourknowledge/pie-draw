@@ -60,7 +60,7 @@ const TAKES_IDS = new Set(['move_selection', 'scale_selection', 'rotate_selectio
 export const TOOLS: ToolSpec[] = [
   {
     name: 'view_canvas',
-    description: `Returns a fresh picture of the canvas with the same header as the <canvas> block in user messages. Use it to check your work. With area, pictures only that part of the canvas, to look closely. With at most ${LIST_LIMIT} shapes, the full shape list comes too.`,
+    description: `Returns a fresh picture of the canvas with the same header as the <canvas> block in user messages. Use it to check your work partway through a task (draw a layer, look, fix what's off). With area, pictures only that part of the canvas, to look closely. With at most ${LIST_LIMIT} shapes, the full shape list comes too.`,
     parameters: {
       type: 'object',
       properties: { area: { ...areaParam, description: 'The part of the canvas to picture. Leave out for the visible area.' } },
