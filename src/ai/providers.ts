@@ -66,14 +66,27 @@ export interface StepResult {
   text: string;
   calls: ToolCall[];
   raw?: { provider: Provider; content: unknown };
-  /** done: answered; tools: wants the calls run; refused / truncated: stopped early. */
+  /**
+   * done: answered; tools: wants the calls run; refused / truncated: stopped early. A truncated reply's
+   * calls may be cut short and must not be run.
+   */
   stop: 'done' | 'tools' | 'refused' | 'truncated';
 }
 
+/** Called as a reply streams in, so the chat can show it before the step ends. */
+export interface StepProgress {
+  /** More of the model's (summarized) thinking. */
+  thinking?: (delta: string) => void;
+  /** More of the reply's text. */
+  text?: (delta: string) => void;
+  /** The model started writing a call to this tool. */
+  tool?: (name: string) => void;
+}
+
 /** `vision` false sends every message as text only, for models that can't read images. */
-export function step(settings: AiSettings, system: string, tools: ToolSpec[], turns: Turn[], signal: AbortSignal, vision: boolean) {
+export function step(settings: AiSettings, system: string, tools: ToolSpec[], turns: Turn[], signal: AbortSignal, vision: boolean, progress: StepProgress = {}) {
   return settings.provider === 'anthropic'
-    ? anthropicStep(settings, system, tools, turns, signal, vision)
+    ? anthropicStep(settings, system, tools, turns, signal, vision, progress)
     : openaiStep(settings, system, tools, turns, signal, vision);
 }
 
@@ -99,10 +112,22 @@ function anthropicError(SDK: typeof Anthropic, e: unknown): unknown {
 
 // ---- Anthropic (Claude) ----
 
+/**
+ * Whether the model takes adaptive thinking (Claude 4.6 and later; Haiku from 5). Older models
+ * reject it, so they're sent no thinking settings at all.
+ */
+function adaptiveThinking(model: string): boolean {
+  const m = /claude-(opus|sonnet|haiku|fable|mythos)-(\d+)(?:-(\d+))?(?!\d)/.exec(model);
+  if (!m) return false;
+  const major = Number(m[2]);
+  const minor = m[3] && m[3].length <= 2 ? Number(m[3]) : 0; // not a date suffix
+  if (m[1] === 'haiku') return major >= 5;
+  return major > 4 || (major === 4 && minor >= 6);
+}
 
 const anthropicImage = (p: Picture) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: p.mediaType, data: p.data } });
 
-async function anthropicStep(settings: AiSettings, system: string, tools: ToolSpec[], turns: Turn[], signal: AbortSignal, vision: boolean): Promise<StepResult> {
+async function anthropicStep(settings: AiSettings, system: string, tools: ToolSpec[], turns: Turn[], signal: AbortSignal, vision: boolean, progress: StepProgress): Promise<StepResult> {
   // Loaded on first use, so the app doesn't download the SDK until someone chats with Claude.
   const { default: SDK } = await import('@anthropic-ai/sdk');
   const client = new SDK({
@@ -149,17 +174,29 @@ async function anthropicStep(settings: AiSettings, system: string, tools: ToolSp
     };
   });
 
-  const params: Anthropic.Beta.MessageCreateParamsNonStreaming = {
+  // Streamed, so the thinking and text show up as they're written, and a long reply (a picture
+  // with hundreds of shapes) doesn't run into the timeouts and lower output cap of a single request.
+  const params: Parameters<typeof client.beta.messages.stream>[0] = {
     model: settings.model,
-    max_tokens: 16000,
+    max_tokens: 64000,
     system,
     tools: tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters })),
     messages,
     cache_control: { type: 'ephemeral' }, // the history only grows, so each turn reuses the last one's cache
+    // Thinking is shown as a readable summary; without `display` it comes back empty.
+    ...(adaptiveThinking(settings.model) ? { thinking: { type: 'adaptive' as const, display: 'summarized' as const } } : {}),
   };
   let response: Anthropic.Beta.BetaMessage;
   try {
-    response = await client.beta.messages.create(params, { signal });
+    const stream = client.beta.messages.stream(params, { signal });
+    for await (const event of stream) {
+      if (event.type === 'content_block_start' && event.content_block.type === 'tool_use') progress.tool?.(event.content_block.name);
+      else if (event.type === 'content_block_delta') {
+        if (event.delta.type === 'thinking_delta') progress.thinking?.(event.delta.thinking);
+        else if (event.delta.type === 'text_delta') progress.text?.(event.delta.text);
+      }
+    }
+    response = await stream.finalMessage();
   } catch (e) {
     throw anthropicError(SDK, e);
   }
@@ -170,7 +207,8 @@ async function anthropicStep(settings: AiSettings, system: string, tools: ToolSp
   );
   const raw = { provider: 'anthropic' as const, content: response.content };
   if (response.stop_reason === 'refusal') return { text, calls: [], raw, stop: 'refused' };
-  if (response.stop_reason === 'max_tokens') return { text, calls: [], raw, stop: 'truncated' };
+  // The calls are kept so they can be answered (as not run): their input may be cut short.
+  if (response.stop_reason === 'max_tokens') return { text, calls, raw, stop: 'truncated' };
   return { text, calls, raw, stop: response.stop_reason === 'tool_use' && calls.length > 0 ? 'tools' : 'done' };
 }
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { MAX_ATTACHMENTS, isConfigured, usesProxy, useChat } from '../ai/chat';
+import { MAX_ATTACHMENTS, isConfigured, usesProxy, useChat, type LogItem } from '../ai/chat';
 import { DEFAULT_MODEL, DEFAULT_URL, type AiSettings, type Provider } from '../ai/providers';
 import { IMAGE_TYPES, pictureUrl, readImageFile, type Picture } from '../ai/snapshot';
 import { useStore } from '../store';
@@ -141,15 +141,20 @@ function CopyButton({ text }: { text: string }) {
 function Conversation({ onLeave }: { onLeave: () => void }) {
   const log = useChat((s) => s.log);
   const busy = useChat((s) => s.busy);
+  const status = useChat((s) => s.status);
   const focusRequest = useChat((s) => s.focusRequest);
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<Picture[]>([]);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  // Follows new messages and streaming text, unless the user has scrolled up to read.
+  const lastText = log.at(-1)?.text.length ?? 0;
+  const thinkingGroups = groupThinking(log);
+  const pinned = useRef(true);
   useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
-  }, [log.length, busy]);
+    if (pinned.current) listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
+  }, [log.length, lastText, busy, status]);
 
   useEffect(() => inputRef.current?.focus(), [focusRequest]);
 
@@ -189,7 +194,14 @@ function Conversation({ onLeave }: { onLeave: () => void }) {
 
   return (
     <>
-      <div className="chat-log" ref={listRef}>
+      <div
+        className="chat-log"
+        ref={listRef}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+        }}
+      >
         {log.length === 0 && (
           <div className="chat-empty">
             <p>After typing, <b>point with the mouse</b> to indicate “here” or “this”, then press <b>Enter</b>.</p>
@@ -209,7 +221,10 @@ function Conversation({ onLeave }: { onLeave: () => void }) {
             </div>
           </div>
         )}
-        {log.map((item) => (
+        {log.map((item) => item.kind === 'thinking' ? (
+          // A message's thinking shows as one section, where its first step was.
+          thinkingGroups.get(item.id) && <Thinking key={item.id} steps={thinkingGroups.get(item.id)!} />
+        ) : (
           <div key={item.id} className={`chat-msg ${item.kind}${item.images ? ' has-images' : ''}`}>
             {item.images && (
               <div className="chat-msg-images">
@@ -220,7 +235,12 @@ function Conversation({ onLeave }: { onLeave: () => void }) {
             {(item.kind === 'user' || item.kind === 'assistant') && <CopyButton text={item.text} />}
           </div>
         ))}
-        {busy && <div className="chat-msg thinking" aria-label="Working"><i /><i /><i /></div>}
+        {busy && (
+          <div className="chat-msg working" aria-label={status ?? 'Working'}>
+            <i /><i /><i />
+            {status && <span className="chat-status">{status}</span>}
+          </div>
+        )}
       </div>
       <form
         className="chat-input"
@@ -294,6 +314,49 @@ function Conversation({ onLeave }: { onLeave: () => void }) {
         </div>
       </form>
     </>
+  );
+}
+
+/**
+ * Gathers each message's thinking steps (one per model call while it works), keyed by the id of
+ * the first step, where the section is shown. A message runs from one user item to the next.
+ */
+function groupThinking(log: LogItem[]): Map<number, LogItem[]> {
+  const groups = new Map<number, LogItem[]>();
+  let current: LogItem[] | null = null;
+  for (const item of log) {
+    if (item.kind === 'user') current = null;
+    else if (item.kind === 'thinking') {
+      if (!current) groups.set(item.id, (current = []));
+      current.push(item);
+    }
+  }
+  return groups;
+}
+
+/**
+ * A message's thinking, as one section. While the model is thinking it's open on the step being
+ * written; once done it folds into a line. Opened by the user, it shows every step.
+ */
+function Thinking({ steps }: { steps: LogItem[] }) {
+  const live = steps.some((s) => !s.done);
+  // null: follow the reply (open while live); otherwise what the user chose.
+  const [chosen, setChosen] = useState<boolean | null>(null);
+  const open = chosen ?? live;
+  const shown = chosen ? steps : steps.slice(-1);
+  const label = live ? 'Thinking…' : steps.length > 1 ? `Thought · ${steps.length} steps` : 'Thought';
+  return (
+    <div className={`chat-msg thinking-log${open ? ' open' : ''}${live ? ' live' : ''}`}>
+      <button type="button" className="chat-thinking-toggle" onClick={() => setChosen(!open)} aria-expanded={open}>
+        {label}
+        <svg viewBox="0 0 20 20" aria-hidden><path d="M8 6 L12 10 L8 14" /></svg>
+      </button>
+      {open && (
+        <div className="chat-thinking-text">
+          {shown.map((step) => <p key={step.id}>{step.text.trim()}</p>)}
+        </div>
+      )}
+    </div>
   );
 }
 

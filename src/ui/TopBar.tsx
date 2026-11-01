@@ -1,5 +1,6 @@
 import { useChat } from '../ai/chat';
 import { kbd } from '../platform';
+import { useSession, type SaveStatus } from '../session';
 import { useStore } from '../store';
 import { SparkleIcon } from './ChatPanel';
 import { FileMenu } from './FileMenu';
@@ -14,6 +15,7 @@ export function TopBar() {
   const canPaste = useStore((s) => s.clipboard !== null);
   const gesturesOn = useStore((s) => s.gesturesOn);
   const chatOpen = useChat((s) => s.open);
+  const autosave = useSession((s) => s.enabled);
   const st = useStore.getState;
 
   return (
@@ -29,10 +31,24 @@ export function TopBar() {
           {fileName ?? 'Untitled'}
           {dirty && <span className="dirty" title="Unsaved changes"> •</span>}
         </span>
+        <SaveIndicator />
       </div>
       {/* Mouse clicks don't focus the buttons, so a later key press doesn't leave a focus ring behind. */}
       <nav className="topbar-actions" onMouseDown={(e) => e.preventDefault()}>
-        {/* A switch, not a one-shot command: the track shows the state at a glance. */}
+        {/* Switches, not one-shot commands: the track shows the state at a glance. */}
+        <button
+          className={`gesture-toggle autosave-toggle${autosave ? ' on' : ''}`}
+          role="switch"
+          aria-checked={autosave}
+          onClick={() => useSession.getState().setEnabled(!autosave)}
+          data-tip="Automatically saves the canvas and the current chat"
+          aria-label="Autosave"
+        >
+          <CloudIcon />
+          <span>Autosave</span>
+          <span className="switch" aria-hidden><span className="knob" /></span>
+        </button>
+        <span className="sep" />
         <button
           className={`gesture-toggle${gesturesOn ? ' on' : ''}`}
           role="switch"
@@ -101,5 +117,36 @@ export function TopBar() {
         </button>
       </nav>
     </header>
+  );
+}
+
+const SAVE_LABEL: Record<SaveStatus, string> = {
+  saved: 'Saved',
+  saving: 'Saving…',
+  error: 'Couldn’t save',
+};
+
+/** Whether the session is saved in this browser, as Google Docs shows beside a document's name. */
+function SaveIndicator() {
+  const enabled = useSession((s) => s.enabled);
+  const status = useSession((s) => s.status);
+  const label = enabled ? SAVE_LABEL[status] : 'Autosave off';
+  const tip = !enabled
+    ? 'Changes aren’t being saved in the browser'
+    : status === 'error'
+      ? 'The browser couldn’t save this session'
+      : 'Changes are saved in the browser';
+  return (
+    <span className={`save-status ${enabled ? status : 'off'}`} data-tip={tip} role="status">
+      {label}
+    </span>
+  );
+}
+
+function CloudIcon() {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden>
+      <path d="M6 15.5 H14.5 a3.25 3.25 0 0 0 .4 -6.48 A5 5 0 0 0 5.3 8.6 A3.45 3.45 0 0 0 6 15.5 Z" />
+    </svg>
   );
 }

@@ -249,6 +249,24 @@ button { font: inherit; color: inherit; }
   white-space: nowrap;
 }
 .dirty { color: var(--accent); }
+/* Sized like a top bar button, so hovering near the label (not just on it) shows its tooltip. The
+   negative margin keeps the text where it was, beside the document name. */
+.save-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 37px;
+  margin-top: 3px;
+  margin-left: -10px;
+  padding: 0 10px 3px;
+  cursor: default;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.topbar .save-status svg { width: 15px; height: 15px; }
+.save-status.error { color: #c62a2f; }
+.save-status.off { opacity: 0.7; }
 .topbar-actions { display: flex; align-items: center; gap: 2px; }
 .topbar-actions button {
   display: flex;
@@ -275,6 +293,7 @@ button { font: inherit; color: inherit; }
 @media (max-width: 640px) {
   .topbar-actions button span { display: none; }
   .doc-name { display: none; }
+  .save-status { display: none; }
 }
 
 .corner {
@@ -1102,8 +1121,8 @@ svg.canvas .shape.drop-target .halo.closed { --halo-opacity: 0.95; }
 .chat-msg.user + .chat-msg:not(.user) { margin-top: 4px; }
 .chat-msg.assistant { align-self: flex-start; max-width: 95%; }
 .chat-msg.error { color: #c62a2f; font-size: 13px; }
-.chat-msg.thinking { display: flex; gap: 4px; padding: 6px 0; }
-.chat-msg.thinking i {
+.chat-msg.working { display: flex; align-items: center; gap: 4px; padding: 6px 0; }
+.chat-msg.working i {
   width: 6px;
   height: 6px;
   border-radius: 50%;
@@ -1111,9 +1130,39 @@ svg.canvas .shape.drop-target .halo.closed { --halo-opacity: 0.95; }
   opacity: 0.3;
   animation: chat-dot 1s infinite ease-in-out;
 }
-.chat-msg.thinking i:nth-child(2) { animation-delay: 0.15s; }
-.chat-msg.thinking i:nth-child(3) { animation-delay: 0.3s; }
+.chat-msg.working i:nth-child(2) { animation-delay: 0.15s; }
+.chat-msg.working i:nth-child(3) { animation-delay: 0.3s; }
 @keyframes chat-dot { 40% { opacity: 1; transform: translateY(-2px); } }
+.chat-status { margin-left: 6px; font-size: 13px; color: var(--muted); }
+
+/* The model's thinking: muted, and folded away once it's done. */
+.chat-msg.thinking-log { align-self: stretch; margin-bottom: 10px; font-size: 13px; color: var(--muted); }
+.chat-thinking-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.chat-thinking-toggle:hover { color: #374151; }
+.chat-thinking-toggle svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; transition: transform 0.15s; }
+.chat-msg.thinking-log.open .chat-thinking-toggle svg { transform: rotate(90deg); }
+.chat-thinking-text {
+  margin-top: 4px;
+  padding-left: 10px;
+  border-left: 2px solid color-mix(in srgb, currentColor 25%, transparent);
+  max-height: 220px;
+  overflow-y: auto;
+}
+/* While streaming it grows freely, so new text lands in the chat log, which follows it; a box with
+   its own scrollbar would hide the newest lines at its bottom. */
+.chat-msg.thinking-log.live .chat-thinking-text { max-height: none; overflow: visible; }
+.chat-thinking-text p { margin: 0; }
+.chat-thinking-text p + p { margin-top: 10px; }
 
 .chat-input {
   display: flex;

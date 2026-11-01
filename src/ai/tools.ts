@@ -29,7 +29,9 @@ const COLOR_HELP = `A hex color such as #ff8800 (any color), or one of the names
 const SHAPES: PrimitiveType[] = ['square', 'rectangle', 'circle', 'ellipse', 'triangle'];
 const MIN_SIZE = 6; // same floor as scaling on the canvas
 const MAX_SIZE = 5000;
-const MAX_BATCH = 200;
+// Small enough that one call is a few thousand output tokens, far below the reply's limit, and that
+// a picture appears on the canvas piece by piece instead of all at the end.
+const MAX_BATCH = 100;
 /** Canvases with at most this many shapes have the full list sent with every view: cheap, and it saves a call. */
 export const LIST_LIMIT = 50;
 /**
