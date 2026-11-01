@@ -201,6 +201,12 @@ async function anthropicStep(settings: AiSettings, system: string, tools: ToolSp
     throw anthropicError(SDK, e);
   }
 
+  // Token use per step, for checking what a reply costs (open the browser console).
+  const u = response.usage;
+  console.info(
+    `[ai] ${settings.model}: in ${u.input_tokens}, cache write ${u.cache_creation_input_tokens ?? 0}, cache read ${u.cache_read_input_tokens ?? 0}, out ${u.output_tokens}`,
+  );
+
   const text = response.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('\n').trim();
   const calls = response.content.flatMap((b) =>
     b.type === 'tool_use' ? [{ id: b.id, name: b.name, input: (b.input ?? {}) as Record<string, unknown> }] : [],

@@ -32,6 +32,8 @@ const MAX_SIZE = 5000;
 // Small enough that one call is a few thousand output tokens, far below the reply's limit, and that
 // a picture appears on the canvas piece by piece instead of all at the end.
 const MAX_BATCH = 100;
+/** create_shapes calls with at least this many shapes remind the model to check the drawing. */
+const CHECK_REMINDER_MIN = 10;
 /** Canvases with at most this many shapes have the full list sent with every view: cheap, and it saves a call. */
 export const LIST_LIMIT = 50;
 /**
@@ -43,9 +45,11 @@ const FIND_LIMIT = 100;
 const FIND_MAX = 300;
 
 const num = { type: 'number' };
+/** Whole canvas units: a hint that keeps the model's coordinates short. Fractions are still accepted. */
+const int = { type: 'integer' };
 const areaParam = {
   type: 'object',
-  properties: { left: num, top: num, right: num, bottom: num },
+  properties: { left: int, top: int, right: int, bottom: int },
   required: ['left', 'top', 'right', 'bottom'],
 };
 const colorParam = (what: string) => ({ type: 'string', description: `${what} ${COLOR_HELP}` });
@@ -87,22 +91,22 @@ export const TOOLS: ToolSpec[] = [
             type: 'object',
             properties: {
               type: { type: 'string', enum: [...SHAPES, 'line'] },
-              x: { ...num, description: 'Center. Not for lines or triangles given by points.' },
-              y: num,
-              width: { ...num, description: 'Leave out width and height for the default size. Squares and circles use the larger of the two for both.' },
-              height: num,
-              rotation: { ...num, description: 'Degrees clockwise. Width and height are measured before turning.' },
+              x: { ...int, description: 'Center. Not for lines or triangles given by points.' },
+              y: int,
+              width: { ...int, description: 'Leave out width and height for the default size. Squares and circles use the larger of the two for both.' },
+              height: int,
+              rotation: { ...int, description: 'Degrees clockwise. Width and height are measured before turning.' },
               points: {
                 type: 'array',
-                items: { type: 'array', items: num, minItems: 2, maxItems: 2 },
+                items: { type: 'array', items: int, minItems: 2, maxItems: 2 },
                 minItems: 3,
                 maxItems: 3,
                 description: 'Triangles only: the three corners as [x, y], making a triangle of any shape. Replaces x, y, width, height and rotation.',
               },
-              x1: { ...num, description: 'Lines only: the two end points (x1, y1) and (x2, y2).' },
-              y1: num,
-              x2: num,
-              y2: num,
+              x1: { ...int, description: 'Lines only: the two end points (x1, y1) and (x2, y2).' },
+              y1: int,
+              x2: int,
+              y2: int,
               line_color: colorParam('Outline color (for a line, its color). For a shape with no visible outline, use its fill color.'),
               fill_color: colorParam('Fill color, or none.'),
             },
@@ -111,6 +115,10 @@ export const TOOLS: ToolSpec[] = [
         },
         line_color: colorParam('Default outline color for items that leave it out.'),
         fill_color: colorParam('Default fill color for items that leave it out.'),
+        outline_matches_fill: {
+          type: 'boolean',
+          description: 'true to give every filled shape without its own line_color an outline the same color as its fill, so it has no visible outline. Saves repeating each color. Lines still use line_color.',
+        },
       },
       required: ['shapes'],
     },
@@ -132,7 +140,7 @@ export const TOOLS: ToolSpec[] = [
   {
     name: 'move_selection',
     description: 'Moves the selected shapes by (dx, dy) canvas units. Positive dx is right, positive dy is down.',
-    parameters: { type: 'object', properties: { dx: num, dy: num }, required: ['dx', 'dy'] },
+    parameters: { type: 'object', properties: { dx: int, dy: int }, required: ['dx', 'dy'] },
   },
   {
     name: 'scale_selection',
@@ -142,7 +150,7 @@ export const TOOLS: ToolSpec[] = [
   {
     name: 'rotate_selection',
     description: 'Rotates the selected shapes clockwise by degrees (negative is counterclockwise), turning them together about the center of their joint box. With absolute true, sets each shape to that angle instead, each turning about its own center (0 stands it upright).',
-    parameters: { type: 'object', properties: { degrees: num, absolute: { type: 'boolean' } }, required: ['degrees'] },
+    parameters: { type: 'object', properties: { degrees: int, absolute: { type: 'boolean' } }, required: ['degrees'] },
   },
   {
     name: 'copy',
@@ -157,7 +165,7 @@ export const TOOLS: ToolSpec[] = [
   {
     name: 'paste',
     description: 'Pastes the clipboard and selects the pasted shapes. With x and y, the pasted group is centered there; otherwise it lands slightly offset from the last copy or paste.',
-    parameters: { type: 'object', properties: { x: num, y: num } },
+    parameters: { type: 'object', properties: { x: int, y: int } },
   },
   {
     name: 'delete_selection',
@@ -494,6 +502,8 @@ const needSelection = () => {
 interface Defaults {
   line: string;
   fill: string | null;
+  /** Filled shapes with no line_color of their own get an outline the color of their fill. */
+  matchFill: boolean;
 }
 
 /** One create_shapes item as a shape, or an InputError saying what is wrong with it. */
@@ -514,6 +524,7 @@ function buildShape(item: Record<string, unknown>, defaults: Defaults): Shape {
 
   const fill = color(item, 'fill_color', { optional: true, none: true });
   const fillValue = fill === undefined ? defaults.fill : fill;
+  const outline = color(item, 'line_color', { optional: true }) ?? (defaults.matchFill && fillValue ? fillValue : defaults.line);
   let shape: Shape;
 
   if (item.points !== undefined) {
@@ -526,16 +537,16 @@ function buildShape(item: Record<string, unknown>, defaults: Defaults): Shape {
     if (area < MIN_SIZE * MIN_SIZE / 2) throw new InputError('the triangle is too small or its corners are in a line');
     const xs = [a[0], b[0], c[0]], ys = [a[1], b[1], c[1]];
     sizeOk(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
-    shape = makeTriangle([a, b, c], lineValue, fillValue);
+    shape = makeTriangle([a, b, c], outline, fillValue);
   } else {
     const x = number(item, 'x'), y = number(item, 'y');
     const w = number(item, 'width', true), h = number(item, 'height', true);
-    if (w === undefined && h === undefined) shape = makePrimitive(type, x, y, lineValue, fillValue);
+    if (w === undefined && h === undefined) shape = makePrimitive(type, x, y, outline, fillValue);
     else {
       // Same as dragging out a box with the create tool: a missing side matches the given one.
       const clamp = (v: number) => Math.min(MAX_SIZE, Math.max(MIN_SIZE, v));
       const bw = clamp(w ?? h!), bh = clamp(h ?? w!);
-      shape = makePrimitiveInBox(type, [x - bw / 2, y - bh / 2], [x + bw / 2, y + bh / 2], lineValue, fillValue);
+      shape = makePrimitiveInBox(type, [x - bw / 2, y - bh / 2], [x + bw / 2, y + bh / 2], outline, fillValue);
     }
     shape.rotation = normAngle(number(item, 'rotation', true) ?? 0); // centered on (x, y), so it turns in place
   }
@@ -600,7 +611,11 @@ function run(name: string, input: Record<string, unknown>, pointing: Pointing): 
       if (!Array.isArray(items) || items.length === 0) throw new InputError('shapes must be a non-empty list');
       if (items.length > MAX_BATCH) throw new InputError(`At most ${MAX_BATCH} shapes per call; split the rest into more calls`);
       const fill = color(input, 'fill_color', { optional: true, none: true });
-      const defaults: Defaults = { line: color(input, 'line_color', { optional: true }) ?? st.currentColor, fill: fill === undefined ? st.currentFill : fill };
+      const defaults: Defaults = {
+        line: color(input, 'line_color', { optional: true }) ?? st.currentColor,
+        fill: fill === undefined ? st.currentFill : fill,
+        matchFill: input.outline_matches_fill === true,
+      };
       const shapes = items.map((item, i) => {
         if (typeof item !== 'object' || item === null) throw new InputError(`shapes[${i}] must be an object`);
         try {
@@ -611,7 +626,10 @@ function run(name: string, input: Record<string, unknown>, pointing: Pointing): 
         }
       });
       st.addShapes(shapes);
-      return { result: `Created ${plural(shapes.length, 'shape')}: ${aliasList(shapes.map((s) => s.id))}` };
+      // A big batch is part of a picture: a reminder here, where the model reads it, gets the check done
+      // far more reliably than the system prompt alone.
+      const check = shapes.length >= CHECK_REMINDER_MIN ? ' Before your final reply, look at the drawing with view_canvas.' : '';
+      return { result: `Created ${plural(shapes.length, 'shape')}: ${aliasList(shapes.map((s) => s.id))}.${check}` };
     }
 
     case 'select_shapes': {
