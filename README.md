@@ -53,11 +53,11 @@ Click **Assistant** in the toolbar (or press **/**) to open a chat panel and ask
 
 #### Connecting a Model
 
-The first time the assistant panel opens, it asks the user to enter a provider, API key and model (if they are not already set).
+The first time the assistant’s chat panel opens, it asks you to select your AI model provider (Anthropic or OpenAI-compatible). To connect to that provider, the app requires an API key and the name of the AI model.
 
 The Server URL is optional for Claude and OpenAI. When left empty, the app uses their usual URL.
 
-Alternatively, copy `.env.example` to `.env.local` and fill in the **AI Configuration** variables. The API key variable has no `VITE_` prefix, so it is only used in the dev server, not injected in a production build.
+Alternatively, you can copy `.env.example` to `.env.local` and fill in the **AI Configuration** variables. The API key variable has no `VITE_` prefix, so it is only used in the dev server, not injected in a production build.
 
 ### Drawing and Editing
 
@@ -163,8 +163,8 @@ Accuracy is measured by classifying each test stroke once. Timing is measured se
 - **Pie menu accessibility.** The menu works from the keyboard, but nothing is announced to screen readers.
 - **Rotation.** There is no gesture to rotate objects. Additionally, the gesture recognizer is not rotation invariant. Generated templates cover quarter turns of the shape and lasso gestures only.
 - **Filling several shapes by gesture.** The fill color gesture can only affect one shape at a time. Dragging inside a selection moves it, so it can't detect a gesture that starts inside it.
-- **Drawing capabilities.** One stroke width. Straight lines are freehand strokes, with no arrowheads or endpoint editing.
-- **Erasing.** There is no pixel-level erasing, by design.
+- **Drawing capabilities.** A single stroke width. 5 shape presets with no option to import additional shapes.
+- **Erasing.** No pixel-level erasing, by design.
 - **Export.** No PNG/SVG export.
 
 ## AI Assistance
