@@ -67,9 +67,9 @@ export function HelpPanel() {
             <li><b>Choose</b> an option by clicking it or dragging toward it and releasing.</li>
             <li><b>Keyboard:</b> <Key>M</Key> opens the menu. With the menu open, use <Key>←</Key> <Key>→</Key> to move around the ring. To enter a submenu, use <Key>↑</Key>. To leave it, use <Key>↓</Key>. Press <Key>Enter</Key> to choose an option.</li>
             <li><b>Cancel</b> by selecting the red X in the center, or by moving past the menu's edge. Esc works too.</li>
-            <li>The <b>File</b> menu at the top allows you to save and open your drawings.</li>
+            <li>The <b>File</b> menu in the toolbar allows you to save and open your drawings.</li>
             <li>
-              <b>Assistant:</b> Click <b>Assistant</b> in the top bar (or press <Key>/</Key>) to interact with an AI assistant.
+              <b>Assistant:</b> Click <b>Assistant</b> in the toolbar (or press <Key>/</Key>) to interact with an AI assistant.
               After typing, <b>point with the mouse</b> to indicate “here” or “this”, then press <b>Enter</b>.
             </li>
             <li>
@@ -93,14 +93,14 @@ export function HelpPanel() {
             </ul>
             <h3>Select Multiple Shapes</h3>
             <ul className="help-list">
-              <li><b>Shift-drag</b> or use the <b>select tool</b> (lower right, or <Key>V</Key>) to select multiple shapes.</li>
-              <li><b>{kbd('mod')}-click</b> (or <b>Shift-click</b>) a shape to add or remove it from the selection.</li>
-              <li>The selected shapes act as one object.</li>
+              <li><b>Shift+drag</b> or use the <b>select tool</b> (lower right, or <Key>V</Key>) to select multiple shapes.</li>
+              <li><b>{kbd('mod')}+click</b> (or <b>Shift+click</b>) a shape to add or remove it from the selection.</li>
+              <li>A multi-selection acts as one object.</li>
             </ul>
             <h3>Color</h3>
             <ul className="help-list">
               <li>Two swatches in the lower right: <b>Line</b> and <b>Fill</b>. They show the selected shape's colors, or what new shapes will get.</li>
-              <li><b>Drag a color onto any shape</b> to paint it directly. Lines only have a line color.</li>
+              <li><b>Drag a color onto a shape</b> to paint it directly. Lines only have a line color.</li>
               <li>The <b>rainbow +</b> opens a color editor, where you can choose and save additional colors.</li>
               <li>Saved colors can be dragged onto a <b>numbered swatch</b>, and numbered swatches can be swapped with each other.</li>
             </ul>

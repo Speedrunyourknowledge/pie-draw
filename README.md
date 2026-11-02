@@ -45,55 +45,51 @@ With gestures enabled, single strokes drawn on the canvas act as commands.
 
 ### AI Assistant
 
-Click **Assistant** in the top bar (or press **/**) to open a chat panel and ask for changes in plain words: "put a green square here", "make the two circles bigger", "copy the triangle and paste it next to the square", "delete everything red".
+Click **Assistant** in the toolbar (or press **/**) to open a chat panel and ask for changes in plain language (e.g. "put a green square here", "delete everything red").
 
-- **Point while you type.** "Here" is where the mouse is on the canvas when you send the message, and "this" is the shape under it. A small marker shows that spot while you type, and the shape "this" will mean glows blue.
+- **Point while you type.** "Here" is where the pointer is on the canvas when you send the message, and "this" refers to a shape at that location. While typing in the message box, the pointer changes to a target icon.
 - **Every action is one the app already has.** The assistant works through the same actions as the menu, gestures and keyboard: create shapes and straight lines, select, move, scale, rotate, cut / copy / paste, delete, recolor, z-order, undo / redo, clear, and zoom. Each change is a normal undo step, so **Undo** reverts it like any other edit.
 - **Beyond the required commands:** recoloring line and fill with any color ("make it teal", "use sunset colors"), rotating ("turn the square into a diamond"), drawing straight lines ("connect the two circles", "draw an arrow pointing at the triangle"), changing the color keys and saving swatches ("save these as my palette"), bringing shapes to front / sending them to back, undoing or redoing several steps ("undo that"), and adjusting the view ("show me everything").
-- **One conversation.** The trash button clears it; the stop button cancels a request in progress.
+- **One conversation.** The trash button clears the conversation. If the stop button is pressed or a new request is sent while the assistant is thinking, the in-progress response is canceled.
 
 #### Connecting a Model
 
-The first time the panel opens, it asks for a provider, API key and model. The settings are stored in this browser only.
+The first time the assistant panel opens, it asks the user to enter a provider, API key and model (if they are not already set).
 
-- **Claude**: an [Anthropic API key](https://console.anthropic.com/) and a model, e.g. `claude-sonnet-5-5`.
-- **OpenAI-compatible**: OpenAI, or any service that offers the same API (OpenRouter, Groq, or local servers such as Ollama and LM Studio). Enter the service's **Server URL**, e.g. `https://openrouter.ai/api/v1` or `http://localhost:11434/v1` for Ollama. The model must support tool calling.
+The Server URL is optional for Claude and OpenAI. When left empty, the app uses their usual URL.
 
-The Server URL is optional for Claude and OpenAI. When left empty, the app uses their usual addresses.
-
-To skip the form, copy `.env.example` to `.env.local`, fill it in, and restart `npm run dev`. The key goes in `AI_API_KEY`. It has no `VITE_` prefix, so it stays on the dev server and never reaches the browser or a build. The dev server forwards the assistant's requests and adds the key. A production build has no server, so there the key must be entered in the panel.
+Alternatively, copy `.env.example` to `.env.local` and fill in the **AI Configuration** variables. The API key variable has no `VITE_` prefix, so it is only used in the dev server, not injected in a production build.
 
 ### Drawing and Editing
 
 - **Create shapes** from the empty-canvas menu. Choosing a shape turns the pointer into a crosshair with a small icon of that shape. Drag to draw it at any size, or click to place it at a default size. For triangles, drag to draw one side, then click to place the third corner; it snaps to right angles and equal sides. The pointer then returns to the pen.
 - **Freehand drawing** with live shape recognition. If a stroke closes into a recognized shape, a **preview** of that shape appears. Release to snap to that shape.
-- **Straight lines.** Hold **Shift** partway through a freehand stroke and it becomes a straight line from where the stroke began. It snaps to horizontal, vertical and 45° when close. Let go of Shift to continue freehand.
-- **Connecting lines.** A selected line shows a handle at each end; drag one to reshape the line. Line ends snap onto other lines' ends and onto the corners of squares, rectangles and triangles (a ring marks the joint). Moving a shape or line snaps it the same way. Dragging from the end of an unselected line draws onward from that exact point.
+- **Straight lines.** Start sketching, then hold **Shift** to get a straight line.
+- **Connecting lines.** Select a straight line, then drag its endpoints to stretch it. Line endpoints snap to each other and to shape corners.
 - **Object manipulation.** Select, move, scale, and rotate objects.
-- **Multi-select.** Select several objects by clicking or with a selection box. A multi-selection acts as one object: moving, scaling, and recoloring affects all selected objects.
+- **Multi-select.** A multi-selection acts as one object: moving, scaling, and recoloring affects all selected objects.
 - **Cut, copy, and paste**, **z-order** (To Front / To Back), an **eraser tool**, and **undo / redo**.
 
 ### Color
 
-Two swatches show the **line color** and **fill color**. The swatches indicate the color of the selected shape or, with nothing selected, the color new shapes will get. Colors can be picked from the swatches, by dragging a swatch onto a shape, or from the shape menu's Line / Fill submenus.
+Two swatches in the lower right show the **line color** and **fill color**. The swatches indicate the color of the selected shape or, with nothing selected, the color new shapes will get.
 
-- **Color keys.** Five colors sit on keys **1–5**, and the swatch fan, the menu's Line / Fill submenus and the number gestures all use them. They start as black, red, blue, green and amber, but any color can be put on any key.
-- **Any color.** The rainbow **+** in the fan opens a color editor with a saturation / brightness square, a hue strip, a hex field, and (in Chrome / Edge) an eyedropper. The selection updates live as you drag, and each drag is one undo step.
-- **Saved colors.** Up to six colors can be saved. They appear in an outer row of the fan, like the pie menu's submenu ring. Drag any color onto a numbered swatch to put it on that key, or drag one key onto another to swap them. Keys and saved colors are remembered in this browser.
+- **Color keys.** The five colors are tied to the number keys **1–5**.
+- **Any color.** The rainbow **+** opens a color editor with a saturation / brightness square and a hue slider. In Chrome and Edge browsers, there is also an eyedropper tool.
+- **Saved colors.** Up to six colors can be saved. Saved colors can be dragged onto a numbered swatch, and numbered swatches can be swapped with each other.
 
 ### Navigation
 
 An infinite canvas with map-style navigation. Pan and zoom with the mouse, a trackpad, or the keyboard.
 
-### Files
+### Saving
 
-Saving and opening files can be done through the **File** menu in the toolbar. Documents are saved as JSON (`{ "version": 1, "shapes": [...] }`) and validated when opened. Unsaved work is indicated with a blue dot next to the document title.
+- **Autosave.** The canvas, the undo history, and the assistant conversation are saved in the browser (IndexedDB) as you work, so a refresh doesn't lose them. The status label next to the document title indicates if changes are being saved. Autosave can be toggled in the toolbar.
+- **Files.** Saving and opening files can be done through the **File** menu in the toolbar. Documents are saved as JSON (`{ "version": 1, "shapes": [...] }`) and validated when opened. Changes not yet saved to a file are indicated with a blue dot next to the document title.
 
 ## Design Decisions
 
 **Pie menu at the pointer instead of a toolbar.** A toolbar makes every command a trip to the screen edge. The pie menu opens where you're working. Every item is equally close, and the wedges widen as you move outward. In Fitts's law terms, the distance is short and the target widens as you move, so every command is fast to hit. The cost is discoverability. An empty-canvas prompt shows new users how to open the menu, and the help panel lists every command.
-
-**Choosing a shape arms a tool instead of dropping a shape.** A shape that appears at a fixed size where the menu was opened almost always has to be moved and scaled afterward. Dragging it out sets position and size in one gesture. The crosshair gives a precise corner to aim with, and the shape icon beside it shows what the next drag will draw, so the mode is visible right where the user is looking. The tool is one-shot and Esc cancels it, so it can't be left on by accident.
 
 **Direction, not distance, selects the menu option.** The slow, label-reading motion later becomes a quick directional flick from memory.
 
@@ -101,21 +97,15 @@ Saving and opening files can be done through the **File** menu in the toolbar. D
 
 **File commands in a conventional toolbar.** File commands are used rarely, so they would take up space in a pie menu that could go to more frequent actions. A File menu in the top left is familiar to people so it is easily found.
 
-**Two ways to box-select.** A plain drag on empty canvas already draws, so box selection uses Shift-drag or the select tool. The box selects anything it *touches*, so a rough drag is enough, and selected shapes are outlined. The selected group then acts as one target for object manipulation.
-
 **Minimal toolbar.** The toolbar is minimal to reduce the work of scanning for the desired option.
 
 **Right-side tools.** The remaining tools sit together in a stack on the right. Keeping them in one place means the user knows exactly where to look, and the large buttons are easy to hit. Each tool has a keyboard or gesture shortcut, so experienced users can skip the stack entirely.
 
 **Color swatches that fan out.** There are two color swatches, and they are distinguished by their appearance, not just their label. Clicking a swatch fans the colors out in an arc that echoes the pie menu. Dragging a swatch onto a shape recolors it without having to select it first.
 
-**Custom colors go on the keys, not in a new place.** The five keys stay in fixed positions in the fan, so choosing one keeps working from memory. A custom color becomes quick to reach by being put on a key, after which the number key, the number gesture and the menu all apply it. The custom button comes first in the outer row, so it never moves as colors are saved. The full color editor stays one click away for the less frequent task of creating a new color.
+**Rotation by direct manipulation.** A visible handle is easier to find than a hidden modifier, and dragging it gives continuous feedback.
 
-**Rotation by direct manipulation.** A visible handle is easier to discover than a hidden modifier, and dragging it gives continuous feedback. The angle snaps only when close to a 45° step, so common angles are easy to hit exactly while any other angle is still possible. A single shape's box turns with it, so its edges still stretch it along its own width and height. A multi-selection keeps an upright box. Stretching it moves every shape exactly with the box, but a turned shape can't be slanted, so it keeps its angle and each of its sides grows by as much as the stretch lengthens that side.
-
-**Line ends are the magnets.** Snapping happens only when one side of the pair is a line's end: end to end, end to corner, or a moved shape's corner onto an end. Corners never pull on corners, so moving shapes near each other stays free. Circles, ellipses and freehand strokes have no snap points. The snap distance is fixed on screen, so it feels the same at any zoom.
-
-**Straight lines without a new tool.** Holding Shift while drawing already means "constrain" elsewhere in the app (equal sides, kept proportions). Shift pressed at the *start* of a drag still box-selects. Pressing it once the stroke is underway straightens the line, so the two uses don't collide.
+**Straight lines without a new tool.** Pressing **Shift** *before* you start dragging initiates a box selection. Holding **Shift** *after* you start dragging straightens the drawn line.
 
 **Ghost preview for shape recognition.** When drawing freehand, a recognized shape appears as a ghost *behind* the drawing, at the exact size it will snap to. It changes only after multiple consecutive frames agree.
 
@@ -127,9 +117,7 @@ Saving and opening files can be done through the **File** menu in the toolbar. D
 
 **Pointing instead of coordinates.** Nobody wants to type coordinates, so the mouse supplies the location. Each message is sent with the pointer's position, the shape under it, the visible area, the selection, and a summary of every shape. That gives the model what it needs to resolve "here", "this", "the one on the left", or "the biggest circle".
 
-**Keeping the pointer visible on the canvas.** Normally, when you press Esc while typing in a text box, the operating system hides the pointer until the mouse moves again. This rarely matters while browsing, but on a drawing canvas, losing the pointer is disorienting. Here is how this app handles it: when Esc is pressed in the chat panel (and the pointer is on the canvas), a marker is shown at the pointer's position with the current tool indicated. This allows the user to resume drawing immediately.
-
-**Any model.** The conversation is stored in a provider-neutral form, and a small adapter talks to Claude (through the Anthropic SDK) or to any OpenAI-compatible API (`src/ai/providers.ts`). The model runs in a loop: it requests tool calls, the app runs them in order and returns the results, and this repeats until the model replies with plain text.
+**Keeping the pointer visible on the canvas.** The operating system normally hides the pointer when Esc is pressed while typing (until the mouse moves again), which is disorienting on a drawing canvas. In this app, when Esc is pressed, a marker shows where the pointer is on the canvas, so drawing can resume right away.
 
 ### Gesture Design
 
@@ -182,7 +170,7 @@ Accuracy is measured by classifying each test stroke once. Timing is measured se
 - **Filling several shapes by gesture.** The fill color gesture can only affect one shape at a time. Dragging inside a selection moves it, so it can't detect a gesture that starts inside it.
 - **Drawing capabilities.** One stroke width. Straight lines are freehand strokes, with no arrowheads or endpoint editing.
 - **Erasing.** There is no pixel-level erasing, by design.
-- **Export and persistence.** No PNG/SVG export, no autosave.
+- **Export.** No PNG/SVG export.
 
 ## AI Assistance
 
