@@ -299,7 +299,10 @@ button { font: inherit; color: inherit; }
 .corner {
   position: fixed;
   right: 20px;
-  bottom: 84px; /* raised off the screen corner so it's a shorter reach from the work */
+  /* Raised off the screen corner so it's a shorter reach from the work. In a short window it slides
+     down, as far as 12px, to keep the fan clear of the top bar: room for the cluster (412px), the Fill
+     fan above it with every saved color (129px), the top bar (48px) and a margin (10px). */
+  bottom: clamp(12px, calc(100dvh - 599px), 84px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -511,8 +514,10 @@ button { font: inherit; color: inherit; }
 .color-editor {
   position: absolute;
   right: 62px;
-  bottom: 0;
+  bottom: calc(0px - var(--ce-drop, 0px)); /* --ce-drop: how far ColorEditor moves it down to stay on screen */
   width: 220px;
+  max-height: calc(100dvh - 16px); /* in a very short window it scrolls */
+  overflow-y: auto;
   padding: 10px 12px 12px;
   border-radius: 12px;
   background: var(--panel);
@@ -522,6 +527,8 @@ button { font: inherit; color: inherit; }
   z-index: 3;
   animation: pie-in 110ms ease-out;
 }
+/* Fill sits one picker (64px) and gap (6px) above Line: reach down so both editors open in the same spot. */
+.color-picker.fill .color-editor { bottom: calc(-70px - var(--ce-drop, 0px)); }
 .ce-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; }
 .ce-head b { flex: 1; }
 .ce-preview { width: 18px; height: 18px; border-radius: 50%; background: var(--swatch); box-shadow: 0 0 0 1px var(--panel-line); }
@@ -531,7 +538,9 @@ button { font: inherit; color: inherit; }
   border: none; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer;
 }
 .ce-close:hover, .ce-icon:hover { background: rgba(31, 41, 51, 0.07); color: var(--black); }
+.ce-icon.on, .ce-icon.on:hover { background: rgba(62, 99, 221, 0.12); color: var(--accent); }
 .ce-close svg, .ce-icon svg, .ce-save svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.ce-icon svg { stroke-width: 2; } /* drawn on a 24-unit grid, not the others' 20 */
 .ce-sv, .ce-hue { position: relative; border-radius: 8px; cursor: crosshair; touch-action: none; outline: none; }
 .ce-sv {
   height: 120px;

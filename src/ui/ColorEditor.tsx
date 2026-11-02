@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { DEFAULT_PALETTE, MAX_SWATCHES, colorLabel, hexToHsv, hsvToHex, normalizeHex, type Hsv } from '../colors';
 import { canFill } from '../geometry';
 import { useStore } from '../store';
@@ -14,6 +14,7 @@ declare global {
 }
 
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
+const SCREEN_MARGIN = 8; // keep this far from the window's edges (matches the max-height in index.css)
 
 /**
  * Any color for the line or fill: a saturation/brightness square, a hue strip and a hex field, all
@@ -27,6 +28,27 @@ export function ColorEditor({ kind, shown, onClose }: { kind: Kind; shown: strin
   const hex = hsvToHex(hsv);
   const [text, setText] = useState(hex.toUpperCase()); // the hex field, which may hold a half-typed code
   const [flash, setFlash] = useState<number | null>(null); // the key that just got this color
+  const [picking, setPicking] = useState(false); // the eyedropper is open
+  const panel = useRef<HTMLDivElement>(null);
+
+  // In a short window the panel's top would go off screen: move it down just enough to stay visible.
+  useLayoutEffect(() => {
+    const el = panel.current!;
+    const fit = () => {
+      el.style.removeProperty('--ce-drop');
+      const box = el.getBoundingClientRect();
+      const drop = Math.max(0, Math.min(SCREEN_MARGIN - box.top, innerHeight - SCREEN_MARGIN - box.bottom));
+      el.style.setProperty('--ce-drop', `${drop}px`);
+    };
+    fit();
+    const resized = new ResizeObserver(fit); // saving colors can make the panel taller
+    resized.observe(el);
+    window.addEventListener('resize', fit);
+    return () => {
+      resized.disconnect();
+      window.removeEventListener('resize', fit);
+    };
+  }, []);
 // The control whose drag or edit already has its undo step. Keyed by control, so focus moving
   // between them (the square's blur fires after the strip's press) can't split one drag in two.
   const recorded = useRef<Control | null>(null);
@@ -97,12 +119,15 @@ export function ColorEditor({ kind, shown, onClose }: { kind: Kind; shown: strin
 
   const eyeDropper = async () => {
     if (!window.EyeDropper) return;
+    setPicking(true);
     try {
       const { sRGBHex } = await new window.EyeDropper().open();
       const h = normalizeHex(sRGBHex);
       if (h) pick(hexToHsv(h), null);
     } catch {
       // Cancelled with Esc.
+    } finally {
+      setPicking(false);
     }
   };
 
@@ -118,7 +143,7 @@ export function ColorEditor({ kind, shown, onClose }: { kind: Kind; shown: strin
 
   return (
     // Stops the picker's focus guard, so the hex field can take focus when clicked.
-    <div className="color-editor" role="dialog" aria-label={title} onMouseDown={(e) => e.stopPropagation()}>
+    <div className="color-editor" ref={panel} role="dialog" aria-label={title} onMouseDown={(e) => e.stopPropagation()}>
       <header className="ce-head">
         <span className={`ce-preview ${kind}`} style={{ '--swatch': hex } as React.CSSProperties} />
         <b>{title}</b>
@@ -183,9 +208,12 @@ export function ColorEditor({ kind, shown, onClose }: { kind: Kind; shown: strin
           }}
         />
         {window.EyeDropper && (
-          <button className="ce-icon" onClick={eyeDropper} aria-label="Pick a color from the screen" data-tip="Pick a color from the screen">
-            <svg viewBox="0 0 20 20">
-              <path d="M12.5 4.2 a1.9 1.9 0 0 1 2.7 0 l0.6 0.6 a1.9 1.9 0 0 1 0 2.7 L13.6 9.7 L10.3 6.4 Z M11.4 7.5 L5 13.9 L4.3 15.7 L6.1 15 L12.5 8.6" />
+          <button className={`ce-icon${picking ? ' on' : ''}`} onClick={eyeDropper} aria-pressed={picking} aria-label="Pick a color from the screen" data-tip="Pick a color from the screen">
+            {/* lucide: pipette */}
+            <svg viewBox="0 0 24 24">
+              <path d="m12 9-8.414 8.414A2 2 0 0 0 3 18.828v1.344a2 2 0 0 1-.586 1.414A2 2 0 0 1 3.828 21h1.344a2 2 0 0 0 1.414-.586L15 12" />
+              <path d="m18 9 .4.4a1 1 0 1 1-3 3l-3.8-3.8a1 1 0 1 1 3-3l.4.4 3.4-3.4a1 1 0 1 1 3 3z" />
+              <path d="m2 22 .414-.414" />
             </svg>
           </button>
         )}
