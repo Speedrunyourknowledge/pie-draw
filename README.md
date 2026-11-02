@@ -53,9 +53,9 @@ Click **Assistant** in the toolbar (or press **/**) to open a chat panel and ask
 
 #### Connecting a Model
 
-The first time the assistant’s chat panel opens, it asks you to select your AI model provider (Anthropic or OpenAI-compatible). To connect to that provider, the app requires an API key and the name of the AI model.
+The first time the assistant’s chat panel opens, it asks you to select your AI model provider (Anthropic or OpenAI-compatible) and enter some information to establish the connection.
 
-The Server URL is optional for Claude and OpenAI. When left empty, the app uses their usual URL.
+An API key is optional for servers that support other authentication methods. A Server URL is optional for Anthropic and OpenAI specifically. When left empty, the app uses their usual URL.
 
 Alternatively, you can copy `.env.example` to `.env.local` and fill in the **AI Configuration** variables. The API key variable has no `VITE_` prefix, so it is only used in the dev server, not injected in a production build.
 

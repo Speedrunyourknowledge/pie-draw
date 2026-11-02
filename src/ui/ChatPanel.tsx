@@ -474,7 +474,7 @@ function Settings({ onDone }: { onDone: () => void }) {
         ))}
       </div>
       <label>
-        API key
+        <span>API key <span className="optional">(optional)</span></span>
         <input
           type="password"
           value={draft.apiKey}
@@ -491,7 +491,7 @@ function Settings({ onDone }: { onDone: () => void }) {
         <span>Server URL <span className="optional">(optional)</span></span>
         <input value={draft.baseUrl} onChange={(e) => set({ baseUrl: e.target.value })} placeholder={DEFAULT_URL[draft.provider]} />
       </label>
-      <button type="submit" className="chat-save" disabled={!isConfigured({ ...draft, apiKey: draft.apiKey.trim(), model: draft.model.trim() })}>
+      <button type="submit" className="chat-save" disabled={!isConfigured({ ...draft, model: draft.model.trim() })}>
         Save
       </button>
     </form>

@@ -65,8 +65,8 @@ function readSettings(): AiSettings {
   }
 }
 
-/** Ready to chat: Anthropic needs a key (or the dev server's); a local OpenAI-compatible server may not. */
-export const isConfigured = (s: AiSettings) => !!s.model && (s.provider === 'openai' || !!s.apiKey || usesProxy(s));
+/** Ready to chat: only the model is needed, since the server may authenticate some other way than a key. */
+export const isConfigured = (s: AiSettings) => !!s.model;
 
 interface ChatState {
   open: boolean;

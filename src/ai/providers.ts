@@ -134,7 +134,8 @@ async function anthropicStep(settings: AiSettings, system: string, tools: ToolSp
   // Loaded on first use, so the app doesn't download the SDK until someone chats with Claude.
   const { default: SDK } = await import('@anthropic-ai/sdk');
   const client = new SDK({
-    apiKey: settings.apiKey,
+    // Without a key, send no auth header at all: an empty key would go out as a bare "Bearer".
+    ...(settings.apiKey ? { apiKey: settings.apiKey } : { apiKey: null, defaultHeaders: { Authorization: null } }),
     baseURL: settings.baseUrl || DEFAULT_URL.anthropic,
     // The key is either the user's own, entered in this browser, or a placeholder the dev server swaps for AI_API_KEY.
     dangerouslyAllowBrowser: true,
