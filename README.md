@@ -47,9 +47,8 @@ With gestures enabled, single strokes drawn on the canvas act as commands.
 
 Click **Assistant** in the toolbar (or press **/**) to open a chat panel and ask for changes in plain language (e.g. "put a green square here", "delete everything red").
 
-- **Point while you type.** "Here" is where the pointer is on the canvas when you send the message, and "this" refers to a shape at that location. While typing in the message box, the pointer changes to a target icon.
-- **Every action is one the app already has.** The assistant works through the same actions as the menu, gestures and keyboard: create shapes and straight lines, select, move, scale, rotate, cut / copy / paste, delete, recolor, z-order, undo / redo, clear, and zoom. Each change is a normal undo step, so **Undo** reverts it like any other edit.
-- **Beyond the required commands:** recoloring line and fill with any color ("make it teal", "use sunset colors"), rotating ("turn the square into a diamond"), drawing straight lines ("connect the two circles", "draw an arrow pointing at the triangle"), changing the color keys and saving swatches ("save these as my palette"), bringing shapes to front / sending them to back, undoing or redoing several steps ("undo that"), and adjusting the view ("show me everything").
+- **Point while you type.** "Here" is the pointer’s location when you send a message, and "this" is an object at that location (unless context indicates otherwise). While typing in the message box, the pointer displays as a target icon on the canvas.
+- **Commands beyond manipulating shapes.** For example: coloring ("use sunset colors"), saving colors ("save these colors to my palette"), drawing straight lines ("draw an arrow pointing here"), undoing actions ("undo that"), drawing a scene (“draw a pair of cardinal birds”).
 - **One conversation.** The trash button clears the conversation. If the stop button is pressed or a new request is sent while the assistant is thinking, the in-progress response is canceled.
 
 #### Connecting a Model
@@ -111,11 +110,7 @@ An infinite canvas with map-style navigation. Pan and zoom with the mouse, a tra
 
 **Feedback and discoverability.** A status line at the bottom always says what the user can currently do, in every state and tool. Hovering a shape turns the pointer into a pointing finger (a move cursor once it is selected) and adds a glow, and a click within a small margin outside a shape's outline, or beside a thin stroke, still gets it. When the canvas is blank, the user is instructed how to open the pie menu and how to access the help panel.
 
-**The assistant uses tools, not a separate feature set.** The model gets a list of tools (`src/ai/tools.ts`), each a thin wrapper around an existing store action, and the app runs whatever calls it asks for. This keeps the assistant's abilities exactly the app's abilities, and its changes show up in undo history like any other edit. The chat doesn't list tool calls, since the user watches the canvas change as it works. Shapes can be created many at once in one call (and one undo step), so a whole scene doesn't take hundreds of calls.
-
-**Select, then act.** Editing tools act on the selection, as they do for a user, instead of taking shape ids. A request like "make the red one bigger" first selects the red shape and then scales it. The assistant's selection is kept apart from the user's, so the user's own selection is never changed or shown changing while it works.
-
-**Pointing instead of coordinates.** Nobody wants to type coordinates, so the mouse supplies the location. Each message is sent with the pointer's position, the shape under it, the visible area, the selection, and a summary of every shape. That gives the model what it needs to resolve "here", "this", "the one on the left", or "the biggest circle".
+**The assistant uses tools.** The assistant gets a list of tools (`src/ai/tools.ts`), each a wrapper around an existing action. This means it can only do what is already possible in the app. This is intentional since the assistant’s output should be editable and reproducible.
 
 **Keeping the pointer visible on the canvas.** The operating system normally hides the pointer when Esc is pressed while typing (until the mouse moves again), which is disorienting on a drawing canvas. In this app, when Esc is pressed, a marker shows where the pointer is on the canvas, so drawing can resume right away.
 
@@ -166,7 +161,7 @@ Accuracy is measured by classifying each test stroke once. Timing is measured se
 - **Mobile and touch.** No support for touchscreen pinch-to-zoom or two-finger pan. Additionally, there is no alternate UI for small screens.
 - **Browsers other than desktop Chrome/Edge.** Can save files, but Save downloads a new copy each time instead of overwriting the original.
 - **Pie menu accessibility.** The menu works from the keyboard, but nothing is announced to screen readers.
-- **Rotation.** There is no rotate gesture. Additionally, the gesture recognizer is not rotation invariant. Generated templates cover quarter turns of the shape and lasso gestures only. Shapes drawn by gesture snap upright.
+- **Rotation.** There is no gesture to rotate objects. Additionally, the gesture recognizer is not rotation invariant. Generated templates cover quarter turns of the shape and lasso gestures only.
 - **Filling several shapes by gesture.** The fill color gesture can only affect one shape at a time. Dragging inside a selection moves it, so it can't detect a gesture that starts inside it.
 - **Drawing capabilities.** One stroke width. Straight lines are freehand strokes, with no arrowheads or endpoint editing.
 - **Erasing.** There is no pixel-level erasing, by design.
