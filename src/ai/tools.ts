@@ -192,7 +192,7 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'color_selection',
-    description: 'Gives every selected shape the same line or fill color. With nothing selected, sets the default for new shapes. To give shapes different colors, use color_shapes.',
+    description: 'Gives every selected shape the same line or fill color. With nothing selected, sets the default for new shapes.',
     parameters: {
       type: 'object',
       properties: {
@@ -205,7 +205,7 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'color_shapes',
-    description: 'Gives each listed shape its own line and/or fill color, in one step (one undo step), and selects them. Use it to color several shapes differently, such as a gradient or palette across them; for one color on every shape, color_selection is enough.',
+    description: 'Gives each listed shape its own line and/or fill color, in one step (one undo step), and selects them.',
     parameters: {
       type: 'object',
       properties: {
