@@ -3,6 +3,9 @@ import { hexToHsv, hsvToHex, normalizeHex } from './colors';
 import {
   anchorsOf,
   snapTriangleTip,
+  equalSides,
+  flipAbout,
+  stepOrder,
   closestSnap,
   frameOf,
   isLine,
@@ -168,19 +171,86 @@ describe('colors', () => {
 describe('snapTriangleTip', () => {
   const a: Pt = [0, 0], b: Pt = [100, 0];
   it('snaps onto a right angle at either end of the side', () => {
-    expect(snapTriangleTip(a, b, [4, 60], 10)).toEqual({ p: [0, 60], from: 'a' });
-    expect(snapTriangleTip(a, b, [97, -50], 10)).toEqual({ p: [100, -50], from: 'b' });
+    expect(snapTriangleTip(a, b, [4, 60], 10)).toEqual({ p: [0, 60], from: ['a'] });
+    expect(snapTriangleTip(a, b, [97, -50], 10)).toEqual({ p: [100, -50], from: ['b'] });
   });
   it('snaps onto equal sides through the middle', () => {
-    expect(snapTriangleTip(a, b, [53, 80], 10)).toEqual({ p: [50, 80], from: 'mid' });
+    expect(snapTriangleTip(a, b, [53, 50], 10)).toEqual({ p: [50, 50], from: ['mid'] });
+  });
+  it('snaps onto a side as long as the first one', () => {
+    const r = snapTriangleTip(a, b, [62, 82], 10); // 102.6 from a
+    expect(r.from).toEqual(['ringA']);
+    expect(Math.hypot(r.p[0], r.p[1])).toBeCloseTo(100);
+  });
+  it('snaps onto an equilateral corner on either side', () => {
+    for (const s of [1, -1]) {
+      const r = snapTriangleTip(a, b, [53, s * 84], 10);
+      expect(r.from).toEqual(['mid', 'ringA', 'ringB']);
+      expect(r.p[0]).toBeCloseTo(50);
+      expect(r.p[1]).toBeCloseTo(s * 50 * Math.sqrt(3));
+    }
+  });
+  it('snaps onto a right isosceles corner', () => {
+    const r = snapTriangleTip(a, b, [5, 96], 10);
+    expect(r.from).toEqual(['a', 'ringA']);
+    expect(r.p[0]).toBeCloseTo(0);
+    expect(r.p[1]).toBeCloseTo(100);
   });
   it('leaves a point far from every guide alone', () => {
-    expect(snapTriangleTip(a, b, [25, 40], 10)).toEqual({ p: [25, 40], from: null });
+    expect(snapTriangleTip(a, b, [25, 40], 10)).toEqual({ p: [25, 40], from: [] });
   });
   it('works for a tilted side', () => {
-    const r = snapTriangleTip([0, 0], [60, 80], [-78.2, 62.4], 10); // 3 units along the side from (-80, 60), which is on the perpendicular at a
-    expect(r.from).toBe('a');
-    expect(r.p[0]).toBeCloseTo(-80);
-    expect(r.p[1]).toBeCloseTo(60);
+    const r = snapTriangleTip([0, 0], [60, 80], [-58.2, 47.4], 10); // 3 units along the side from (-60, 45), which is on the perpendicular at a
+    expect(r.from).toEqual(['a']);
+    expect(r.p[0]).toBeCloseTo(-60);
+    expect(r.p[1]).toBeCloseTo(45);
+  });
+});
+
+describe('equalSides', () => {
+  it('names the sides each guide makes equal', () => {
+    expect(equalSides(['mid'])).toEqual([1, 2]);
+    expect(equalSides(['a', 'ringA'])).toEqual([0, 2]);
+    expect(equalSides(['mid', 'ringA', 'ringB'])).toEqual([0, 1, 2]);
+    expect(equalSides(['a'])).toEqual([]);
+  });
+});
+
+describe('stepOrder', () => {
+  const picked = (set: string) => (s: string) => set.includes(s);
+  it('moves picked shapes one step past the next one', () => {
+    expect(stepOrder(['a', 'b', 'c', 'd'], picked('b'), 'forward')).toEqual(['a', 'c', 'b', 'd']);
+    expect(stepOrder(['a', 'b', 'c', 'd'], picked('c'), 'backward')).toEqual(['a', 'c', 'b', 'd']);
+  });
+  it('moves a run of picked shapes together, keeping their order', () => {
+    expect(stepOrder(['a', 'b', 'c', 'd'], picked('ab'), 'forward')).toEqual(['c', 'a', 'b', 'd']);
+    expect(stepOrder(['a', 'b', 'c', 'd'], picked('cd'), 'backward')).toEqual(['a', 'c', 'd', 'b']);
+  });
+  it('leaves shapes already at the end alone', () => {
+    expect(stepOrder(['a', 'b', 'c'], picked('bc'), 'forward')).toEqual(['a', 'b', 'c']);
+    expect(stepOrder(['a', 'b', 'c'], picked('a'), 'backward')).toEqual(['a', 'b', 'c']);
+  });
+});
+
+describe('flipAbout', () => {
+  const tri: Shape = { ...makePrimitive('triangle', 10, 20, '#000000', null), rotation: 30 };
+  it('mirrors position, turn and points left-right', () => {
+    const f = flipAbout(tri, 'horizontal', 0, 0);
+    expect([f.x, f.y, f.rotation]).toEqual([-10, 20, -30]);
+    if (f.type !== 'triangle' || tri.type !== 'triangle') throw new Error();
+    expect(f.points).toEqual(tri.points.map(([x, y]) => [-x, y]));
+  });
+  it('mirrors top-bottom, and twice gives back the shape', () => {
+    const f = flipAbout(tri, 'vertical', 0, 50);
+    expect([f.x, f.y]).toEqual([10, 80]);
+    expect(flipAbout(f, 'vertical', 0, 50)).toEqual(tri);
+  });
+  it('mirrors corners on the canvas', () => {
+    const before = anchorsOf(tri).map((a) => a.p);
+    const after = anchorsOf(flipAbout(tri, 'horizontal', 0, 0)).map((a) => a.p);
+    after.forEach(([x, y], i) => {
+      expect(x).toBeCloseTo(-before[i][0]);
+      expect(y).toBeCloseTo(before[i][1]);
+    });
   });
 });

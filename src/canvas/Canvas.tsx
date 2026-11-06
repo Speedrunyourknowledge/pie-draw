@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import simplify from 'simplify-js';
-import { STROKE_WIDTH, anchorsOf, canFill, closestSnap, dist, isLine, lineEnds, lineWithEnds, makeTriangle, snapTriangleTip, triangleArea2, frameOf, groupBounds, groupFrame, inFrame, makeFreehand, makePrimitive, makePrimitiveInBox, mustScaleEvenly, normAngle, pointsBounds, rotateAbout, rotatePt, scaleAbout, shapeInLasso, shapeNearPoint, shapeTouchesRect, snapAngle, snapSegment, type Anchor, type Bounds, type Frame } from '../geometry';
+import { STROKE_WIDTH, anchorsOf, canFill, closestSnap, dist, isLine, lineEnds, lineWithEnds, makeTriangle, snapTriangleTip, equalSides, triangleArea2, frameOf, groupBounds, groupFrame, inFrame, makeFreehand, makePrimitive, makePrimitiveInBox, mustScaleEvenly, normAngle, pointsBounds, rotateAbout, rotatePt, scaleAbout, shapeInLasso, shapeNearPoint, shapeTouchesRect, snapAngle, snapSegment, type Anchor, type Bounds, type Frame, type TipGuide as TipGuideKind } from '../geometry';
 import { describeAction, gestureFor, type GestureAction } from '../gestures/gestureConfig';
 import { CUSP_SPAN_PX, SCRIBBLE_HIT_PX, isScribble } from '../gestures/heuristics';
 import { PieMenu } from '../interaction/PieMenu';
@@ -149,6 +149,14 @@ function boxOf(a: Pt, b: Pt): Bounds {
 /** Where the create tool is in making a triangle: dragging its first side, or placing its third corner. */
 type TriStep = 'side' | 'corner' | null;
 
+/** The guides a triangle's third corner snapped onto, with the triangle it makes. */
+interface TipGuideState {
+  a: Pt;
+  b: Pt;
+  tip: Pt;
+  from: TipGuideKind[];
+}
+
 interface StatusInput {
   menu: MenuState | null;
   rotation: number | null; // the selection box's angle while it is being turned
@@ -161,16 +169,18 @@ interface StatusInput {
   tool: Tool;
   createType: PrimitiveType;
   triStep: TriStep;
+  triName: string | null; // the kind of triangle the third corner has snapped into
 }
 
 /** One line of context-sensitive guidance, so the available actions are never a mystery. */
-function statusText({ menu, rotation, movingEnd, lineSelected, line, mode, selectionCount, tool, createType, triStep }: StatusInput) {
+function statusText({ menu, rotation, movingEnd, lineSelected, line, mode, selectionCount, tool, createType, triStep, triName }: StatusInput) {
   if (menu) return 'Select an option · Click the center or outside the menu to cancel';
   if (mode === 'scaling') return 'Hold Shift to keep proportions';
   if (movingEnd) return 'Snaps to other line endpoints and shape corners';
   if (rotation !== null) return `Rotated ${Math.round(normAngle(rotation))}° · Double-click the handle to reset`;
   if (mode === 'selecting') return 'Every shape the box touches is selected · Release to finish';
   if (triStep === 'side') return 'Release to finish this side · Snaps to shape corners and 45° steps';
+  if (triStep === 'corner' && triName) return `${triName} · Click to place the third corner · Press Esc to cancel`;
   if (triStep === 'corner') return 'Click to place the third corner · Snaps to right angles and equal sides · Press Esc to cancel';
   if (tool === 'create' && createType === 'triangle') {
     return 'Drag to draw one side, then click to place the third corner · Click to place a default triangle · Press Esc to cancel';
@@ -196,19 +206,58 @@ function statusText({ menu, rotation, movingEnd, lineSelected, line, mode, selec
 }
 
 const MARK_PX = 9; // size of the right-angle mark
+const TICK_PX = 6; // half the length of the tick marking an equal side
+const ARC_PX = 40; // how far a dashed arc runs on screen to either side of the third corner
 
-/** The dashed line a triangle's third corner snapped along, with a right-angle mark where it meets the side. */
-function TipGuide({ from, along, tip, right, view }: { from: Pt; along: Pt; tip: Pt; right: boolean; view: View }) {
-  const o = toScreen(from, view), t = toScreen(tip, view), s = toScreen(along, view);
-  const unit = (q: Pt): Pt => {
+/** The kind of triangle the third corner snapped into, for the status line, or null for none. */
+function triangleName({ from }: TipGuideState): string | null {
+  const equal = equalSides(from).length;
+  const right = from.includes('a') || from.includes('b');
+  if (equal === 3) return 'Equilateral triangle';
+  if (equal === 2) return right ? 'Right isosceles triangle' : 'Isosceles triangle';
+  return right ? 'Right triangle' : null;
+}
+
+/**
+ * The guides a triangle's third corner snapped onto: a dashed line for a right angle (with a mark
+ * where it meets the side), a dashed arc for a circle around an end of the side, and a tick across
+ * each side that came out equal. The line through the side's middle isn't drawn: the ticks on the
+ * two equal sides already show it.
+ */
+function TipGuide({ a, b, tip, from, view }: TipGuideState & { view: View }) {
+  const [sa, sb, st] = [a, b, tip].map((q) => toScreen(q, view));
+  const unit = (o: Pt, q: Pt, len: number): Pt => {
     const d = Math.hypot(q[0] - o[0], q[1] - o[1]) || 1;
-    return [((q[0] - o[0]) / d) * MARK_PX, ((q[1] - o[1]) / d) * MARK_PX];
+    return [((q[0] - o[0]) / d) * len, ((q[1] - o[1]) / d) * len];
   };
-  const u = unit(s), v = unit(t);
+  const line = (o: Pt, key: string) => <line key={key} x1={o[0]} y1={o[1]} x2={st[0]} y2={st[1]} />;
+  const rightMark = (o: Pt, along: Pt, key: string) => {
+    const u = unit(o, along, MARK_PX), v = unit(o, st, MARK_PX);
+    return <polyline key={key} points={`${o[0] + u[0]},${o[1] + u[1]} ${o[0] + u[0] + v[0]},${o[1] + u[1] + v[1]} ${o[0] + v[0]},${o[1] + v[1]}`} />;
+  };
+  const arc = (o: Pt, key: string) => {
+    const r = Math.hypot(st[0] - o[0], st[1] - o[1]);
+    if (r === 0) return null;
+    const mid = Math.atan2(st[1] - o[1], st[0] - o[0]), half = Math.min(ARC_PX / r, Math.PI / 3);
+    const end = (t: number) => `${o[0] + r * Math.cos(t)},${o[1] + r * Math.sin(t)}`;
+    return <path key={key} className="tip-arc" d={`M${end(mid - half)} A${r},${r} 0 0 1 ${end(mid + half)}`} />;
+  };
+  const corners = [sa, sb, st];
+  const ticks = equalSides(from);
   return (
     <g className="tip-guide">
-      <line x1={o[0]} y1={o[1]} x2={t[0]} y2={t[1]} />
-      {right && <polyline points={`${o[0] + u[0]},${o[1] + u[1]} ${o[0] + u[0] + v[0]},${o[1] + u[1] + v[1]} ${o[0] + v[0]},${o[1] + v[1]}`} />}
+      {from.map((g) =>
+        g === 'a' ? [line(sa, 'a'), rightMark(sa, sb, 'ra')]
+        : g === 'b' ? [line(sb, 'b'), rightMark(sb, sa, 'rb')]
+        : g === 'mid' ? null
+        : arc(g === 'ringA' ? sa : sb, g),
+      )}
+      {ticks.map((i) => {
+        const p = corners[i], q = corners[(i + 1) % 3];
+        const m: Pt = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+        const [dx, dy] = unit(p, q, TICK_PX);
+        return <line key={`tick${i}`} className="tick" x1={m[0] + dy} y1={m[1] - dx} x2={m[0] - dy} y2={m[1] + dx} />;
+      })}
     </g>
   );
 }
@@ -253,8 +302,8 @@ export function Canvas() {
   // two, no gesture is running (so the view can still be panned and zoomed): the side waits here.
   const triRef = useRef<{ a: Pt; b: Pt; targets: Anchor[] } | null>(null);
   const [triStep, setTriStep] = useState<TriStep>(null);
-  // The line the third corner snapped along (from a side's end for a right angle, or its middle).
-  const [tipGuide, setTipGuide] = useState<{ from: Pt; along: Pt; tip: Pt; right: boolean } | null>(null);
+  // The guides the third corner snapped onto (right angles, equal sides).
+  const [tipGuide, setTipGuide] = useState<TipGuideState | null>(null);
 
   const selected = shapes.filter((s) => selectedIds.includes(s.id));
 
@@ -521,16 +570,10 @@ export function Canvas() {
     const { a, b, targets } = triRef.current!;
     const st = useStore.getState();
     const onAnchor = placeEnd(w, null, targets);
-    const snap = onAnchor.snapped ? { p: onAnchor.p, from: null } : snapTriangleTip(a, b, w, SNAP_PX / st.view.zoom);
+    const snap = onAnchor.snapped ? { p: onAnchor.p, from: [] } : snapTriangleTip(a, b, w, SNAP_PX / st.view.zoom);
     const corners: Pt[] = [a, b, snap.p];
-    const mid: Pt = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
     setSnapRings(onAnchor.snapped ? [snap.p] : []);
-    setTipGuide(
-      snap.from === 'a' ? { from: a, along: b, tip: snap.p, right: true }
-      : snap.from === 'b' ? { from: b, along: a, tip: snap.p, right: true }
-      : snap.from === 'mid' ? { from: mid, along: b, tip: snap.p, right: false }
-      : null,
-    );
+    setTipGuide(snap.from.length > 0 ? { a, b, tip: snap.p, from: snap.from } : null);
     // Too flat to be a triangle: the third corner is (nearly) on the side's line.
     const flat = triangleArea2(corners) < (dist(a, b) * MIN_SIZE) / st.view.zoom;
     return { shape: makeTriangle(corners as [Pt, Pt, Pt], st.currentColor, st.currentFill), flat };
@@ -1199,7 +1242,7 @@ export function Canvas() {
         </div>
       )}
       <div className="status">
-        {statusText({ menu, rotation: turning?.angle ?? null, movingEnd, lineSelected: selected.length === 1 && isLine(selected[0]), line: lineMode, spaceHeld: spaceHeld || panning, mode, selectionCount: selected.length, tool, createType, triStep })}
+        {statusText({ menu, rotation: turning?.angle ?? null, movingEnd, lineSelected: selected.length === 1 && isLine(selected[0]), line: lineMode, spaceHeld: spaceHeld || panning, mode, selectionCount: selected.length, tool, createType, triStep, triName: tipGuide && triangleName(tipGuide) })}
       </div>
     </>
   );

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { DEFAULT_PALETTE, MAX_SWATCHES, loadPalette, loadSwatches, storePalette, storeSwatches } from './colors';
-import { canFill, frameOf, groupBounds, groupFrame, newId, normAngle, rotateAbout } from './geometry';
+import { canFill, flipAbout, frameOf, groupBounds, groupFrame, newId, normAngle, rotateAbout, stepOrder } from './geometry';
 import { kbd } from './platform';
 import { PALETTE, type PrimitiveType, type Shape, type TransformPatch } from './types';
 
@@ -126,6 +126,10 @@ interface AppState {
   setCreateTool: (type: PrimitiveType) => void;
   bringToFront: () => void;
   sendToBack: () => void;
+  /** Moves the selection one step up or down the stack, past the next shape that isn't selected. */
+  stepSelection: (dir: 'forward' | 'backward') => void;
+  /** Mirrors the selection across its middle, left-right (`horizontal`) or top-bottom (`vertical`). */
+  flipSelection: (axis: 'horizontal' | 'vertical') => void;
   nudge: (dx: number, dy: number) => void;
   undo: () => void;
   redo: () => void;
@@ -402,6 +406,19 @@ export const useStore = create<AppState>()((set, get) => {
       const sel = selected();
       if (sel.length === 0) return;
       change({ shapes: [...sel, ...get().shapes.filter((x) => !sel.includes(x))] });
+    },
+
+    stepSelection: (dir) => {
+      const { shapes, selectedIds } = get();
+      const next = stepOrder(shapes, (s) => selectedIds.includes(s.id), dir);
+      if (next.some((s, i) => s !== shapes[i])) change({ shapes: next });
+    },
+
+    flipSelection: (axis) => {
+      const sel = selected();
+      if (sel.length === 0) return;
+      const f = groupFrame(sel);
+      changeSelected((s) => flipAbout(s, axis, f.cx, f.cy));
     },
 
     nudge: (dx, dy) => {

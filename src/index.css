@@ -125,7 +125,8 @@ svg.canvas.eraser .shape.erase-target .halo, svg.canvas.eraser .shape.erase-targ
 /* Where a line's end or a shape's corner has snapped onto another line's end or corner. */
 .snap-ring { fill: rgba(62, 99, 221, 0.15); stroke: var(--accent); stroke-width: 1.5; pointer-events: none; }
 .tip-guide { fill: none; stroke: var(--accent); stroke-width: 1.5; pointer-events: none; }
-.tip-guide line { stroke-dasharray: 4 4; }
+.tip-guide line, .tip-guide .tip-arc { stroke-dasharray: 4 4; }
+.tip-guide .tick { stroke-width: 2; stroke-dasharray: none; } /* marks a side equal to the others marked */
 .canvas.mode-rotating .rotate-knob { fill: var(--accent); }
 .canvas.mode-rotating .shape:hover .halo { display: none; }
 
