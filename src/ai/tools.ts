@@ -231,12 +231,23 @@ export const TOOLS: ToolSpec[] = [
     },
   },
   {
-    name: 'set_key_color',
-    description: "Puts a color on one of the user's color keys 1-5 (their quick palette: keys, number gestures, swatch fan and menu all use it). Only when the user asks to change their palette or keys.",
+    name: 'set_key_colors',
+    description: "Puts colors on the user's color keys 1-5 (their quick palette: keys, number gestures, swatch fan and menu all use it), all in one call. A color is only ever on one key: if a new color is already on a key not being set, that key takes the replaced color instead. Only when the user asks to change their palette or keys.",
     parameters: {
       type: 'object',
-      properties: { key: { type: 'integer', minimum: 1, maximum: 5 }, color: { type: 'string', description: COLOR_HELP } },
-      required: ['key', 'color'],
+      properties: {
+        keys: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 5,
+          items: {
+            type: 'object',
+            properties: { key: { type: 'integer', minimum: 1, maximum: 5 }, color: { type: 'string', description: COLOR_HELP } },
+            required: ['key', 'color'],
+          },
+        },
+      },
+      required: ['keys'],
     },
   },
   {
@@ -848,13 +859,34 @@ function run(name: string, input: Record<string, unknown>, pointing: Pointing): 
       return { result: `Recolored ${plural(patches.size, 'shape')}` };
     }
 
-    case 'set_key_color': {
-      const key = Math.round(number(input, 'key'));
-      if (key < 1 || key > 5) throw new InputError('key must be 1-5');
-      const value = color(input, 'color')!;
-      const other = st.setPaletteSlot(key - 1, value);
-      if (other !== null) return { result: `${colorName(value)} was already on key ${other + 1}, so keys ${other + 1} and ${key} swapped` };
-      return { result: `Key ${key} is now ${colorName(value)}` };
+    case 'set_key_colors': {
+      const items = input.keys;
+      if (!Array.isArray(items) || items.length === 0) throw new InputError('keys must be a non-empty list');
+      if (items.length > 5) throw new InputError('There are only 5 keys');
+      const assigned = new Map<number, string>();
+      items.forEach((it, i) => {
+        if (typeof it !== 'object' || it === null) throw new InputError(`keys[${i}] must be an object`);
+        const item = it as Record<string, unknown>;
+        try {
+          const key = Math.round(number(item, 'key'));
+          if (key < 1 || key > 5) throw new InputError('key must be 1-5');
+          if (assigned.has(key)) throw new InputError(`key ${key} is listed twice`);
+          const value = color(item, 'color')!;
+          if ([...assigned.values()].some((c) => c.toLowerCase() === value.toLowerCase())) throw new InputError(`${colorName(value)} is listed twice; a color can only be on one key`);
+          assigned.set(key, value);
+        } catch (e) {
+          if (e instanceof InputError) throw new InputError(`keys[${i}]: ${e.message}. No keys were changed.`);
+          throw e;
+        }
+      });
+      // The colors are distinct, so a swap never disturbs a key set earlier in this call.
+      const swapped: string[] = [];
+      for (const [key, value] of assigned) {
+        const other = st.setPaletteSlot(key - 1, value);
+        if (other !== null && !assigned.has(other + 1)) swapped.push(`${colorName(value)} was on key ${other + 1}, so that key now has the color key ${key} had`);
+      }
+      const keys = useStore.getState().palette.map((c, i) => `${i + 1} ${colorName(c)}`).join(', ');
+      return { result: `Keys are now ${keys}.${swapped.length ? ` ${swapped.join('; ')}.` : ''}` };
     }
 
     case 'save_swatches': {
