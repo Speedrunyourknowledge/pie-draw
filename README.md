@@ -71,7 +71,7 @@ Click **Help** in the app for how to do each of these.
 ### Color
 
 - **Line and fill swatches** show the selected shape's colors, or the colors new shapes will get.
-- **Up to eleven saved colors** with five selectable through the number keys **1–5**.
+- **Up to 11 saved colors** with five selectable through the number keys **1–5**.
 - **A color editor** for any color, with an eyedropper in Chrome and Edge.
 
 ### Navigation
