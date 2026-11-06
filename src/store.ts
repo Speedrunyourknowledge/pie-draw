@@ -67,7 +67,8 @@ interface AppState {
 
   /** Records the current shapes for undo. Call once before a change (or at the start of a drag). */
   checkpoint: () => void;
-  addShape: (shape: Shape, select?: boolean) => void;
+  /** Adds one shape as an undo step. The selection is left as it is, so the next stroke still draws. */
+  addShape: (shape: Shape) => void;
   /** Adds several shapes as one undo step and selects them. */
   addShapes: (shapes: Shape[]) => void;
   /** Live update without a history entry; pair with checkpoint() at gesture start. */
@@ -201,11 +202,7 @@ export const useStore = create<AppState>()((set, get) => {
     checkpoint: () =>
       set((st) => ({ past: [...st.past, st.shapes].slice(-HISTORY_LIMIT), future: [], dirty: true })),
 
-    addShape: (shape, select = true) =>
-      change({
-        shapes: [...get().shapes, shape],
-        selectedIds: select ? [shape.id] : get().selectedIds,
-      }),
+    addShape: (shape) => change({ shapes: [...get().shapes, shape] }),
 
     addShapes: (added) => {
       if (added.length === 0) return;

@@ -1,7 +1,7 @@
 import { MAX_SWATCHES, colorLabel, normalizeHex } from '../colors';
-import { anchorsOf, dist, frameOf, isLine, groupFrame, worldBounds, makeFreehand, makePrimitive, makePrimitiveInBox, makeTriangle, mustScaleEvenly, normAngle, scaleAbout, toWorldFn } from '../geometry';
+import { anchorsOf, canFill, dist, frameOf, isLine, groupFrame, worldBounds, makeFreehand, makePrimitive, makePrimitiveInBox, makeTriangle, mustScaleEvenly, normAngle, scaleAbout, toWorldFn } from '../geometry';
 import { useStore } from '../store';
-import { PALETTE, type PrimitiveType, type Pt, type Shape } from '../types';
+import { PALETTE, type PrimitiveType, type Pt, type Shape, type TransformPatch } from '../types';
 import { fitToContent, resetZoom, toScreen, toWorld, zoomIn, zoomOut } from '../view';
 import type { WithPicture } from './providers';
 import { gridStep, renderPicture, type Area } from './snapshot';
@@ -55,7 +55,7 @@ const areaParam = {
 const colorParam = (what: string) => ({ type: 'string', description: `${what} ${COLOR_HELP}` });
 const idsParam = { type: 'array', items: { type: 'string' }, description: 'Act on these shapes instead of the selection. They become the selection.' };
 /** Tools that act on the selection and also take ids, to skip a select_shapes call. */
-const TAKES_IDS = new Set(['move_selection', 'scale_selection', 'rotate_selection', 'copy', 'cut', 'delete_selection', 'set_color', 'arrange']);
+const TAKES_IDS = new Set(['move_selection', 'scale_selection', 'rotate_selection', 'copy', 'cut', 'delete_selection', 'color_selection', 'arrange']);
 
 export const TOOLS: ToolSpec[] = [
   {
@@ -191,8 +191,8 @@ export const TOOLS: ToolSpec[] = [
     parameters: { type: 'object', properties: { ids: idsParam } },
   },
   {
-    name: 'set_color',
-    description: 'Sets the line or fill color of the selected shapes. With nothing selected, sets the default for new shapes.',
+    name: 'color_selection',
+    description: 'Gives every selected shape the same line or fill color. With nothing selected, sets the default for new shapes. To give shapes different colors, use color_shapes.',
     parameters: {
       type: 'object',
       properties: {
@@ -201,6 +201,33 @@ export const TOOLS: ToolSpec[] = [
         ids: idsParam,
       },
       required: ['target', 'color'],
+    },
+  },
+  {
+    name: 'color_shapes',
+    description: 'Gives each listed shape its own line and/or fill color, in one step (one undo step), and selects them. Use it to color several shapes differently, such as a gradient or palette across them; for one color on every shape, color_selection is enough.',
+    parameters: {
+      type: 'object',
+      properties: {
+        colors: {
+          type: 'array',
+          maxItems: MAX_BATCH,
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              line_color: colorParam('New outline color (for a line, its color).'),
+              fill_color: colorParam('New fill color, or none. Not for lines or freehand strokes.'),
+            },
+            required: ['id'],
+          },
+        },
+        outline_matches_fill: {
+          type: 'boolean',
+          description: 'true to also set the outline of each shape given a fill_color to that fill color, so it has no visible outline. An item\'s own line_color still overrides it.',
+        },
+      },
+      required: ['colors'],
     },
   },
   {
@@ -772,7 +799,7 @@ function run(name: string, input: Record<string, unknown>, pointing: Pointing): 
       return { result: `Deleted ${plural(n, 'shape')}` };
     }
 
-    case 'set_color': {
+    case 'color_selection': {
       const target = oneOf(input, 'target', ['line', 'fill'] as const)!;
       if (target === 'line' && String(input.color).trim().toLowerCase() === 'none') throw new InputError('Lines always have a color; for no visible outline, use the fill color');
       const value = color(input, 'color', { none: target === 'fill' })!;
@@ -784,6 +811,41 @@ function run(name: string, input: Record<string, unknown>, pointing: Pointing): 
       }
       const what = n === 0 ? `default ${target} color` : `${target} of ${plural(n, 'shape')}`;
       return { result: `Set ${what} to ${colorName(value)}` };
+    }
+
+    case 'color_shapes': {
+      const items = input.colors;
+      if (!Array.isArray(items) || items.length === 0) throw new InputError('colors must be a non-empty list');
+      if (items.length > MAX_BATCH) throw new InputError(`At most ${MAX_BATCH} items per call; split the rest into more calls`);
+      const matchFill = input.outline_matches_fill === true;
+      const patches = new Map<string, TransformPatch>();
+      items.forEach((it, i) => {
+        if (typeof it !== 'object' || it === null) throw new InputError(`colors[${i}] must be an object`);
+        const item = it as Record<string, unknown>;
+        try {
+          const [id] = shapeIds([item.id]);
+          if (patches.has(id)) throw new InputError(`${String(item.id)} is listed twice`);
+          if (String(item.line_color).trim().toLowerCase() === 'none') throw new InputError('Lines always have a color; for no visible outline, use the fill color');
+          const line = color(item, 'line_color', { optional: true });
+          const fill = color(item, 'fill_color', { optional: true, none: true });
+          if (line === undefined && fill === undefined) throw new InputError('give line_color, fill_color or both');
+          const patch: TransformPatch = {};
+          if (fill !== undefined) {
+            if (!canFill(st.shapes.find((s) => s.id === id)!)) throw new InputError(`${String(item.id)} has no fill`);
+            patch.fill = fill;
+          }
+          const outline = line ?? (matchFill && fill ? fill : undefined);
+          if (outline) patch.stroke = outline;
+          patches.set(id, patch);
+        } catch (e) {
+          if (e instanceof InputError) throw new InputError(`colors[${i}]: ${e.message}. Nothing was recolored.`);
+          throw e;
+        }
+      });
+      st.checkpoint();
+      st.updateShapes(patches);
+      st.setSelection([...patches.keys()]);
+      return { result: `Recolored ${plural(patches.size, 'shape')}` };
     }
 
     case 'set_key_color': {

@@ -381,7 +381,7 @@ export function Canvas() {
       // A straight line is always ink: never a gesture, never a recognized shape.
       if (dist(line[0], line[1]) * st.view.zoom < MOVE_THRESHOLD) return;
       st.select(null);
-      st.addShape(makeFreehand(line, st.currentColor, true), false);
+      st.addShape(makeFreehand(line, st.currentColor, true));
       return;
     }
     if (points.length < 2) return;
@@ -419,14 +419,14 @@ export function Canvas() {
     st.select(null); // not a command, so like any drawing it ends the selection
     if (result) {
       const shape = shapeFromRecognized(result, st.currentColor, st.currentFill);
-      st.addShape(shape, false);
+      st.addShape(shape);
       pulse(shape.id);
       return;
     }
     const simplified = simplify(points.map(([x, y]) => ({ x, y })), 0.8, true).map(
       (q) => [q.x, q.y] as Pt,
     );
-    st.addShape(makeFreehand(simplified, st.currentColor), false);
+    st.addShape(makeFreehand(simplified, st.currentColor));
   };
 
   /**
@@ -490,11 +490,15 @@ export function Canvas() {
 
   // ---- create tool ----
 
-  /** Adds the shape the create tool made and hands the pointer back to the draw tool. */
+  /**
+   * Adds the shape the create tool made and hands the pointer back to the draw tool.
+   * Like a recognized gesture, the new shape is left unselected so the next stroke draws.
+   */
   const placeShape = (shape: Shape) => {
     const st = useStore.getState();
     setDraft(null);
-    st.addShape(shape, true);
+    st.select(null);
+    st.addShape(shape);
     st.setTool('draw');
     pulse(shape.id);
   };
