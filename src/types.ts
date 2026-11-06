@@ -21,8 +21,8 @@ export interface BaseShape {
   y: number;
   scaleX: number;
   scaleY: number;
-  rotation: number; // always 0; rotation is out of scope
-  fill: string | null; // one of PALETTE, or null
+  rotation: number; // degrees, clockwise on screen, about (x, y)
+  fill: string | null; // a #rrggbb color, or null
   stroke: string | null;
   strokeWidth: number;
 }
@@ -45,13 +45,16 @@ export interface Triangle extends BaseShape {
 export interface Freehand extends BaseShape {
   type: 'freehand';
   points: Pt[];
+  /** A straight line (drawn with Shift, or by the assistant): exactly 2 points, with draggable, snapping ends. */
+  straight?: boolean;
 }
 
 export type Shape = RectLike | EllipseLike | Triangle | Freehand;
 
-/** Fields every operation (move, scale, recolor) is allowed to change. */
-export type TransformPatch = Partial<Pick<BaseShape, 'x' | 'y' | 'scaleX' | 'scaleY' | 'fill' | 'stroke'>>;
+/** Fields every operation (move, scale, rotate, recolor) is allowed to change. */
+export type TransformPatch = Partial<Pick<BaseShape, 'x' | 'y' | 'scaleX' | 'scaleY' | 'rotation' | 'fill' | 'stroke'>>;
 
+/** The default colors on keys 1–5. Each key can be given any other color (see colors.ts). */
 export const PALETTE = [
   { name: 'Black', value: '#1f2933' },
   { name: 'Red', value: '#e5484d' },

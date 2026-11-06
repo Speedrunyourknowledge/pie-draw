@@ -3,7 +3,7 @@
  * 10 samples of it in record mode (RECORD_MODE=true). Changing how a gesture is drawn only needs new
  * samples; changing what it does only needs a different `action`.
  */
-import { PALETTE } from '../types';
+import { DEFAULT_PALETTE, colorLabel } from '../colors';
 
 /** What a recognized gesture does. Each maps onto an existing app action. */
 export type GestureAction =
@@ -11,13 +11,16 @@ export type GestureAction =
   | { kind: 'createShape'; family: 'rectangle' | 'circle' | 'triangle' }
   | { kind: 'lasso' }
   | { kind: 'copy' }
+  // Started inside an unselected shape: clears that shape's fill (and makes no fill the default),
+  // like the color gestures fill it. Anywhere else: cuts the selection.
   | { kind: 'cut' }
   | { kind: 'paste' }
   // Where it starts picks the target. Inside an unselected shape: fills that shape (and makes the
   // color the default fill). Elsewhere with a selection: sets the selection's line color. On empty
   // canvas with no selection: sets the line color for new shapes. (Inside a selection is a drag, so
-  // filling selected shapes is left to the Fill swatch and the pie menu.)
-  | { kind: 'setColor'; color: string };
+  // filling selected shapes is left to the Fill swatch and the pie menu.) `slot` is the key 1–5
+  // (0–4) whose color it applies, so it follows whatever color the user has put on that key.
+  | { kind: 'setColor'; slot: number };
 
 export interface GestureDef {
   /** Recognizer class; samples in templates.json are stored under it. */
@@ -50,14 +53,14 @@ export const GESTURES: readonly GestureDef[] = [
   { label: 'triangle', hint: 'Closed loop with 3 corners, clockwise', action: { kind: 'createShape', family: 'triangle' }, anyStart: true, anyRotation: true },
   { label: 'lasso', hint: 'Closed loop, counterclockwise; wobbles and slight dents are fine', action: { kind: 'lasso' }, anyStart: true, anyRotation: true },
   { label: 'copy', hint: 'Letter C', action: { kind: 'copy' } },
-  { label: 'cut', hint: 'Forward slash, either direction', action: { kind: 'cut' }, eitherDirection: true },
+  { label: 'cut', hint: 'Forward slash, either direction. Started inside a shape, clears its fill', action: { kind: 'cut' }, eitherDirection: true },
   { label: 'paste', hint: 'Upside down caret, either direction', action: { kind: 'paste' }, eitherDirection: true },
   // Numbers match the keyboard shortcuts 1–5 for the same colors.
-  { label: 'color_1', hint: 'Number 1', action: { kind: 'setColor', color: PALETTE[0].value } },
-  { label: 'color_2', hint: 'Number 2', action: { kind: 'setColor', color: PALETTE[1].value } },
-  { label: 'color_3', hint: 'Number 3', action: { kind: 'setColor', color: PALETTE[2].value } },
-  { label: 'color_4', hint: 'Number 4', action: { kind: 'setColor', color: PALETTE[3].value } },
-  { label: 'color_5', hint: 'Number 5', action: { kind: 'setColor', color: PALETTE[4].value } },
+  { label: 'color_1', hint: 'Number 1', action: { kind: 'setColor', slot: 0 } },
+  { label: 'color_2', hint: 'Number 2', action: { kind: 'setColor', slot: 1 } },
+  { label: 'color_3', hint: 'Number 3', action: { kind: 'setColor', slot: 2 } },
+  { label: 'color_4', hint: 'Number 4', action: { kind: 'setColor', slot: 3 } },
+  { label: 'color_5', hint: 'Number 5', action: { kind: 'setColor', slot: 4 } },
 ];
 
 export const gestureFor = (label: string) => GESTURES.find((g) => g.label === label);
@@ -65,7 +68,7 @@ export const gestureFor = (label: string) => GESTURES.find((g) => g.label === la
 /** Sections of the gesture reference, in display order, each with the rule its gestures share. */
 export const GESTURE_SECTIONS = [
   { name: 'Shapes', note: 'Draw with roughly equal width and height for a square or circle.' },
-  { name: 'Select and edit', note: 'Copy and cut act on shapes selected with the lasso.' },
+  { name: 'Select and edit', note: 'Copy and cut act on shapes selected with the lasso. A slash started inside an unselected shape clears its fill instead of cutting.' },
   { name: 'Colors', note: 'Started inside a shape, fills that shape. Started on the canvas, sets the line color of the selected shapes, or with nothing selected, of new shapes.' },
 ] as const;
 export type GestureSection = (typeof GESTURE_SECTIONS)[number]['name'];
@@ -81,8 +84,8 @@ export function sectionOf(action: GestureAction): GestureSection {
   }
 }
 
-/** What the gesture does, in words for the gesture reference. */
-export function describeAction(action: GestureAction): string {
+/** What the gesture does, in words for the gesture reference. Colors name what is on the key now. */
+export function describeAction(action: GestureAction, palette: readonly string[] = DEFAULT_PALETTE): string {
   switch (action.kind) {
     case 'createShape':
       return {
@@ -95,10 +98,10 @@ export function describeAction(action: GestureAction): string {
     case 'copy':
       return 'Copy the selection';
     case 'cut':
-      return 'Cut the selection';
+      return 'Cut the selection, or clear a fill';
     case 'paste':
       return 'Paste at a location';
     case 'setColor':
-      return PALETTE.find((c) => c.value === action.color)?.name ?? action.color;
+      return colorLabel(palette[action.slot]);
   }
 }

@@ -6,6 +6,18 @@
   --accent: #3e63dd;
   --panel: #ffffff;
   --panel-line: rgba(31, 41, 51, 0.12);
+  /* The canvas draws its own cursors, in the style of the pen and eraser, rather than the system's. */
+  --cursor-crosshair: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M11 2.5 V8 M11 14 V19.5 M2.5 11 H8 M14 11 H19.5' stroke='white' stroke-width='3.6'/%3E%3Cpath d='M11 2.5 V8 M11 14 V19.5 M2.5 11 H8 M14 11 H19.5' stroke='%231f2933' stroke-width='1.6'/%3E%3C/svg%3E") 11 11, crosshair;
+  --cursor-move: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M11 3 V19 M3 11 H19 M8.5 5.5 L11 3 L13.5 5.5 M8.5 16.5 L11 19 L13.5 16.5 M5.5 8.5 L3 11 L5.5 13.5 M16.5 8.5 L19 11 L16.5 13.5' stroke='white' stroke-width='3.6'/%3E%3Cpath d='M11 3 V19 M3 11 H19 M8.5 5.5 L11 3 L13.5 5.5 M8.5 16.5 L11 19 L13.5 16.5 M5.5 8.5 L3 11 L5.5 13.5 M16.5 8.5 L19 11 L16.5 13.5' stroke='%231f2933' stroke-width='1.6'/%3E%3C/svg%3E") 11 11, move;
+  --cursor-ns-resize: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M11 3 V19 M8 6 L11 3 L14 6 M8 16 L11 19 L14 16' stroke='white' stroke-width='3.6'/%3E%3Cpath d='M11 3 V19 M8 6 L11 3 L14 6 M8 16 L11 19 L14 16' stroke='%231f2933' stroke-width='1.6'/%3E%3C/svg%3E") 11 11, ns-resize;
+  --cursor-ew-resize: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 11 H19 M6 8 L3 11 L6 14 M16 8 L19 11 L16 14' stroke='white' stroke-width='3.6'/%3E%3Cpath d='M3 11 H19 M6 8 L3 11 L6 14 M16 8 L19 11 L16 14' stroke='%231f2933' stroke-width='1.6'/%3E%3C/svg%3E") 11 11, ew-resize;
+  --cursor-nwse-resize: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 5 L17 17 M5 9.5 V5 H9.5 M17 12.5 V17 H12.5' stroke='white' stroke-width='3.6'/%3E%3Cpath d='M5 5 L17 17 M5 9.5 V5 H9.5 M17 12.5 V17 H12.5' stroke='%231f2933' stroke-width='1.6'/%3E%3C/svg%3E") 11 11, nwse-resize;
+  --cursor-nesw-resize: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17 5 L5 17 M12.5 5 H17 V9.5 M9.5 17 H5 V12.5' stroke='white' stroke-width='3.6'/%3E%3Cpath d='M17 5 L5 17 M12.5 5 H17 V9.5 M9.5 17 H5 V12.5' stroke='%231f2933' stroke-width='1.6'/%3E%3C/svg%3E") 11 11, nesw-resize;
+  /* A pointing finger (hotspot at the fingertip), over a shape a click would select. */
+  --cursor-pointer: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7.5 13.6 V4 a1.75 1.75 0 0 1 3.5 0 V10.5 a1.75 1.75 0 0 1 3.5 0 V11 a1.75 1.75 0 0 1 3.5 0 V12 a1.75 1.75 0 0 1 3.5 0 V15.5 c0 3.6 -2.6 6 -6.2 6 H13.2 c-2 0 -3.3 -0.7 -4.5 -2 L4.6 15.4 a1.6 1.6 0 0 1 2.4 -2.3 Z' stroke='white' stroke-width='3.6'/%3E%3Cpath d='M7.5 13.6 V4 a1.75 1.75 0 0 1 3.5 0 V10.5 a1.75 1.75 0 0 1 3.5 0 V11 a1.75 1.75 0 0 1 3.5 0 V12 a1.75 1.75 0 0 1 3.5 0 V15.5 c0 3.6 -2.6 6 -6.2 6 H13.2 c-2 0 -3.3 -0.7 -4.5 -2 L4.6 15.4 a1.6 1.6 0 0 1 2.4 -2.3 Z' fill='white' stroke='%231f2933' stroke-width='1.6'/%3E%3C/svg%3E") 8 2, pointer;
+  /* A curved double-headed arrow, for the rotate knob on the selection box. The heads are filled
+     triangles that extend past the arc's ends along its tangent, so they never overlap the body. */
+  --cursor-rotate: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 11 A7 7 0 0 1 17 11 M3.2 14 L7.23 12.34 L2.77 9.66 Z M18.8 14 L14.77 12.34 L19.23 9.66 Z' stroke='white' stroke-width='3.2' fill='white'/%3E%3Cpath d='M5 11 A7 7 0 0 1 17 11' stroke='%231f2933' stroke-width='1.6'/%3E%3Cpath d='M3.2 14 L7.23 12.34 L2.77 9.66 Z M18.8 14 L14.77 12.34 L19.23 9.66 Z' fill='%231f2933' stroke='%231f2933' stroke-width='0.6'/%3E%3C/svg%3E") 11 11, grab;
   font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   color: var(--black);
 }
@@ -52,17 +64,21 @@ svg.canvas.eraser .shape.erase-target .halo, svg.canvas.eraser .shape.erase-targ
 }
 /* Create tool: a crosshair with the armed shape beside it (see shapeCursor.ts), over everything on
    the canvas, since a drag draws the shape wherever it starts. */
-.canvas.create, .canvas.create * { cursor: var(--create-cursor, crosshair); }
+.canvas.create, .canvas.create * { cursor: var(--create-cursor, var(--cursor-crosshair)); }
 .canvas.create .shape:hover .halo { display: none; }
 
 /* ---- shapes ---- */
-.shape { cursor: move; }
+.shape { cursor: var(--cursor-move); }
+/* An unselected shape shows the pointing finger, since a click selects it (with gestures on, a drag
+   over it still draws, so a color gesture can fill it). :where() keeps it as weak as .shape, so the
+   tool cursors (hand, eraser, create, Shift-select) still win. */
+.shape:where(:not(.selected)) { cursor: var(--cursor-pointer); }
 /* The hover glow is a halo drawn behind the shape, outside its outline only (see ShapeView). */
 .shape .halo { display: none; }
 .shape:hover .halo { display: inline; }
 .canvas.mode-drawing .shape, .canvas.mode-menuOpen .shape { cursor: inherit; }
-/* Drawing with gestures, a drag over an unselected shape is a stroke (a color gesture fills it). */
-.canvas.gestures .shape:not(.selected) { cursor: inherit; }
+/* Mid-drag (moving shapes, or a line's end) the move cursor stays, whatever passes underneath. */
+.canvas.mode-dragging, .canvas.mode-dragging * { cursor: var(--cursor-move); }
 .canvas.mode-drawing .shape:hover .halo, .canvas.mode-menuOpen .shape:hover .halo { display: none; }
 
 .pulse {
@@ -88,9 +104,30 @@ svg.canvas.eraser .shape.erase-target .halo, svg.canvas.eraser .shape.erase-targ
   stroke: var(--accent);
   stroke-width: 1.5;
 }
-.handle-nw, .handle-se { cursor: nwse-resize; }
-.handle-ne, .handle-sw { cursor: nesw-resize; }
+/* Resize cursors follow each handle's direction, so they stay right when the box is turned. */
+.cur-ns { cursor: var(--cursor-ns-resize); }
+.cur-ew { cursor: var(--cursor-ew-resize); }
+.cur-nwse { cursor: var(--cursor-nwse-resize); }
+.cur-nesw { cursor: var(--cursor-nesw-resize); }
 .handle:hover { fill: var(--accent); }
+/* The rotate knob above the box: drawn small, grabbed from a wider invisible circle. */
+.rotate-stem { stroke: var(--accent); stroke-width: 1; pointer-events: none; }
+.rotate-grab { fill: transparent; pointer-events: all; }
+.rotate-knob { fill: #fff; stroke: var(--accent); stroke-width: 1.5; pointer-events: none; }
+.rotate-handle { cursor: var(--cursor-rotate); }
+.rotate-handle:hover .rotate-knob { fill: var(--accent); }
+.canvas.mode-rotating, .canvas.mode-rotating * { cursor: var(--cursor-rotate); }
+/* A selected line's ends: drag one to move it. */
+.end-grab { fill: transparent; pointer-events: all; }
+.end-knob { fill: #fff; stroke: var(--accent); stroke-width: 1.5; pointer-events: none; }
+.end-handle { cursor: var(--cursor-move); }
+.end-handle:hover .end-knob { fill: var(--accent); }
+/* Where a line's end or a shape's corner has snapped onto another line's end or corner. */
+.snap-ring { fill: rgba(62, 99, 221, 0.15); stroke: var(--accent); stroke-width: 1.5; pointer-events: none; }
+.tip-guide { fill: none; stroke: var(--accent); stroke-width: 1.5; pointer-events: none; }
+.tip-guide line { stroke-dasharray: 4 4; }
+.canvas.mode-rotating .rotate-knob { fill: var(--accent); }
+.canvas.mode-rotating .shape:hover .halo { display: none; }
 
 /* ---- toast ---- */
 .toast {
@@ -212,6 +249,24 @@ button { font: inherit; color: inherit; }
   white-space: nowrap;
 }
 .dirty { color: var(--accent); }
+/* Sized like a top bar button, so hovering near the label (not just on it) shows its tooltip. The
+   negative margin keeps the text where it was, beside the document name. */
+.save-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 37px;
+  margin-top: 3px;
+  margin-left: -10px;
+  padding: 0 10px 3px;
+  cursor: default;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.topbar .save-status svg { width: 15px; height: 15px; }
+.save-status.error { color: #c62a2f; }
+.save-status.off { opacity: 0.7; }
 .topbar-actions { display: flex; align-items: center; gap: 2px; }
 .topbar-actions button {
   display: flex;
@@ -238,12 +293,16 @@ button { font: inherit; color: inherit; }
 @media (max-width: 640px) {
   .topbar-actions button span { display: none; }
   .doc-name { display: none; }
+  .save-status { display: none; }
 }
 
 .corner {
   position: fixed;
   right: 20px;
-  bottom: 84px; /* raised off the screen corner so it's a shorter reach from the work */
+  /* Raised off the screen corner so it's a shorter reach from the work. In a short window it slides
+     down, as far as 12px, to keep the fan clear of the top bar: room for the cluster (412px), the Fill
+     fan above it with every saved color (129px), the top bar (48px) and a margin (10px). */
+  bottom: clamp(12px, calc(100dvh - 599px), 84px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -435,8 +494,123 @@ button { font: inherit; color: inherit; }
 .fan-swatch.fill { top: 4px; } /* centered on the button, so every swatch is the same distance away */
 .fan-swatch.line { top: calc(4px + 2px); left: calc(4px + 8px); }
 .fan-swatch:hover { transform: translate(var(--x), var(--y)) scale(1.12); }
-.fan-swatch.active { box-shadow: 0 0 0 2px var(--swatch), 0 3px 10px rgba(31, 41, 51, 0.18); }
-.fan-swatch.none.active { box-shadow: 0 0 0 2px var(--cancel), 0 3px 10px rgba(31, 41, 51, 0.18); }
+/* A key's swatch with a color dragged over it: dropping puts that color on the key. */
+.fan-swatch.slot-target { transform: translate(var(--x), var(--y)) scale(1.18); box-shadow: 0 0 0 2px var(--accent), 0 3px 10px rgba(31, 41, 51, 0.18); }
+/* The custom color button opens the editor: a rainbow ring around a plus. */
+.fan-swatch.custom {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: radial-gradient(circle, #fff 0 52%, transparent calc(52% + 0.5px)),
+    conic-gradient(#e5484d, #f5a524, #30a46c, #3e63dd, #8e4ec6, #e5484d);
+  color: var(--black);
+}
+.fan-swatch.custom svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+/* Saved colors sit in the outer row, a little smaller than the keys' swatches. */
+.fan-swatch.saved { transform: translate(var(--x), var(--y)) scale(0.85); }
+.fan-swatch.saved:hover { transform: translate(var(--x), var(--y)) scale(0.97); }
+
+/* ---- custom color editor (opens beside the swatches) ---- */
+.color-editor {
+  position: absolute;
+  right: 62px;
+  bottom: calc(0px - var(--ce-drop, 0px)); /* --ce-drop: how far ColorEditor moves it down to stay on screen */
+  width: 220px;
+  max-height: calc(100dvh - 16px); /* in a very short window it scrolls */
+  overflow-y: auto;
+  padding: 10px 12px 12px;
+  border-radius: 12px;
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  box-shadow: 0 8px 24px rgba(31, 41, 51, 0.16);
+  font-size: 12px;
+  z-index: 3;
+  animation: pie-in 110ms ease-out;
+}
+/* Fill sits one picker (64px) and gap (6px) above Line: reach down so both editors open in the same spot. */
+.color-picker.fill .color-editor { bottom: calc(-70px - var(--ce-drop, 0px)); }
+.ce-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; }
+.ce-head b { flex: 1; }
+.ce-preview { width: 18px; height: 18px; border-radius: 50%; background: var(--swatch); box-shadow: 0 0 0 1px var(--panel-line); }
+.ce-preview.line { background: radial-gradient(circle, #fff 0 34%, var(--swatch) calc(34% + 0.5px)); }
+.ce-close, .ce-icon {
+  width: 26px; height: 26px; display: grid; place-items: center; padding: 0;
+  border: none; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer;
+}
+.ce-close:hover, .ce-icon:hover { background: rgba(31, 41, 51, 0.07); color: var(--black); }
+.ce-icon.on, .ce-icon.on:hover { background: rgba(62, 99, 221, 0.12); color: var(--accent); }
+.ce-close svg, .ce-icon svg, .ce-save svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.ce-icon svg { stroke-width: 2; } /* drawn on a 24-unit grid, not the others' 20 */
+.ce-sv, .ce-hue { position: relative; border-radius: 8px; cursor: crosshair; touch-action: none; outline: none; }
+.ce-sv {
+  height: 120px;
+  background: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, var(--hue));
+}
+.ce-hue {
+  height: 14px;
+  margin-top: 10px;
+  border-radius: 999px;
+  background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+}
+.ce-sv:focus-visible, .ce-hue:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+.ce-thumb {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(31, 41, 51, 0.35), 0 1px 3px rgba(31, 41, 51, 0.3);
+  pointer-events: none;
+}
+.ce-hue .ce-thumb { top: 50%; }
+.ce-row { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+.ce-hex {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--panel-line);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.ce-hex:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(62, 99, 221, 0.2); }
+.ce-label { display: flex; justify-content: space-between; align-items: center; margin: 12px 0 6px; font-weight: 700; color: var(--muted); letter-spacing: 0.02em; }
+.ce-reset { padding: 0; border: none; background: none; font-size: 12px; font-weight: 600; color: var(--accent); cursor: pointer; }
+.ce-reset:hover { color: #23419f; }
+.ce-swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+.ce-swatch {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: var(--swatch);
+  box-shadow: 0 0 0 1px var(--panel-line);
+  cursor: pointer;
+  transition: transform 100ms;
+}
+.ce-swatch:hover:not(:disabled) { transform: scale(1.1); }
+.ce-swatch.same { box-shadow: 0 0 0 2px var(--swatch); }
+.ce-swatch.flash { animation: pulse 300ms ease-out; box-shadow: 0 0 0 2px var(--accent); }
+.ce-key { position: absolute; right: -5px; bottom: -5px; font-size: 9px; font-weight: 700; color: var(--muted); background: #fff; border-radius: 5px; padding: 0 3px; border: 1px solid var(--panel-line); }
+.ce-save { display: grid; place-items: center; background: #fff; border: 1px dashed rgba(31, 41, 51, 0.3); box-shadow: none; color: var(--muted); }
+.ce-save:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.ce-save:disabled { opacity: 0.4; cursor: default; }
+.ce-saved { position: relative; display: inline-flex; }
+.ce-remove {
+  position: absolute; top: -5px; right: -5px; width: 15px; height: 15px; padding: 0;
+  border: 1px solid var(--panel-line); border-radius: 50%; background: #fff;
+  font-size: 11px; line-height: 1; color: var(--muted); cursor: pointer; opacity: 0;
+}
+.ce-saved:hover .ce-remove, .ce-remove:focus-visible { opacity: 1; }
+.ce-remove:hover { background: #fbdcdc; color: #c62a2f; }
+
 .fan-key {
   position: absolute;
   right: -7px;
@@ -463,6 +637,9 @@ button { font: inherit; color: inherit; }
 }
 /* A stronger version of the hover halo; `svg.` outranks the rules that hide it in other modes. */
 svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo { display: inline; --halo-opacity: 0.8; }
+/* Around a closed shape the glow sits on one side of the outline only, so it is stronger than a line's to read as clearly. */
+.halo.closed { --halo-opacity: 0.75; }
+svg.canvas .shape.drop-target .halo.closed { --halo-opacity: 0.95; }
 
 /* ---- multi-select ---- */
 .selection-member {
@@ -480,7 +657,7 @@ svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo {
   stroke-dasharray: 4 3;
   pointer-events: none;
 }
-.canvas.select, .canvas.mode-selecting, .canvas.mode-selecting .shape { cursor: crosshair; }
+.canvas.select, .canvas.mode-selecting, .canvas.mode-selecting .shape { cursor: var(--cursor-crosshair); }
 .nav svg .solid { fill: currentColor; }
 
 /* ---- File menu (top bar) ---- */
@@ -538,13 +715,11 @@ svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo {
 .file-keys { color: var(--muted); font-size: 12px; }
 
 /* A multi-selection's box is one target: it takes the move cursor and covers the members' hover glow. */
-.group-area { fill: transparent; pointer-events: all; cursor: move; }
+.group-area { fill: transparent; pointer-events: all; cursor: var(--cursor-move); }
 .edge { fill: transparent; pointer-events: all; }
-.edge-n, .edge-s { cursor: ns-resize; }
-.edge-e, .edge-w { cursor: ew-resize; }
 .canvas.mode-selecting .shape:hover .halo { display: none; }
 /* Holding Shift (in the draw or select tool) means a drag box-selects, so show the select cursor. */
-.canvas.shift-select, .canvas.shift-select .shape, .canvas.shift-select .group-area { cursor: crosshair; }
+.canvas.shift-select, .canvas.shift-select .shape, .canvas.shift-select .group-area { cursor: var(--cursor-crosshair); }
 .canvas.shift-select .shape:hover .halo { display: none; }
 
 /* With the menu open it alone has focus: shapes, handles and edges beneath it give up their cursors
@@ -554,7 +729,7 @@ svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo {
 .canvas.mode-menuOpen.over-menu { cursor: pointer; }
 /* .shape and .group-area are named to match the three-class tool rules above (hand, eraser, shift). */
 .canvas.mode-menuOpen *, .canvas.mode-menuOpen .shape, .canvas.mode-menuOpen .group-area { cursor: inherit; }
-.canvas.mode-menuOpen .handle:hover { fill: #fff; }
+.canvas.mode-menuOpen .handle:hover, .canvas.mode-menuOpen .rotate-handle:hover .rotate-knob, .canvas.mode-menuOpen .end-handle:hover .end-knob { fill: #fff; }
 
 /* ---- gesture record mode (hidden: RECORD_MODE=true) ---- */
 .record {
@@ -699,11 +874,7 @@ svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo {
 .record .rec-del:hover { background: #fbdcdc; color: #c62a2f; }
 
 /* ---- gesture mode switch (top bar) ---- */
-.topbar-actions .gesture-toggle { color: var(--muted); }
-.topbar-actions .gesture-toggle.on { color: var(--black); }
-.gesture-toggle .sparkle { opacity: 0; transition: opacity 120ms; }
-.gesture-toggle.on .sparkle { opacity: 1; stroke: var(--accent); }
-.gesture-toggle.on svg path:first-child { stroke: var(--accent); }
+/* Only the switch track shows the state; the icon and label look the same either way. */
 .switch {
   position: relative;
   width: 26px;
@@ -739,7 +910,7 @@ svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo {
   align-items: center;
   gap: 6px;
   width: fit-content;
-  margin: 8px 0 0;
+  margin: 12px 0 0;
   padding: 7px 14px;
   border: 1px solid rgba(62, 99, 221, 0.3);
   border-radius: 8px;
@@ -812,3 +983,422 @@ svg.canvas .shape.drop-target .halo, svg.canvas .shape.drop-target:hover .halo {
 .rec-thumb:hover .rec-star, .record .rec-star.on { opacity: 1; }
 .record .rec-star.on { color: #f5a524; }
 .record .rec-star:hover { background: #fdf3df; color: #f5a524; }
+
+/* ---- assistant chat ---- */
+/* The open Assistant button is tinted; the gesture switch shows its state with the track alone. */
+.topbar-actions button.on:not(.gesture-toggle) { background: #e8edfc; color: var(--accent); }
+.topbar-actions button.on:not(.gesture-toggle):hover { background: #dde4fb; }
+.menu-open .chat { opacity: 0.35; }
+.chat {
+  position: fixed;
+  top: 60px;
+  left: 12px;
+  bottom: 16px;
+  width: 340px;
+  max-width: calc(100vw - 24px);
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--panel-line);
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(31, 41, 51, 0.1);
+  z-index: 2;
+  overflow: hidden;
+  font-size: 14px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.chat svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: none;
+}
+.sparkle-icon path { stroke-width: 1.4; }
+.chat-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 8px 8px 14px;
+  border-bottom: 1px solid var(--panel-line);
+}
+.chat-head .sparkle-icon { color: var(--accent); }
+.chat-title { font-weight: 600; }
+.chat-model {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-icon {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.chat-icon:hover:not(:disabled) { background: rgba(31, 41, 51, 0.07); color: var(--black); }
+.chat-icon:disabled { opacity: 0.35; cursor: default; }
+.chat-icon.on,
+.chat-icon.on:hover:not(:disabled) { background: rgba(62, 99, 221, 0.12); color: var(--accent); }
+
+.chat-log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.chat-empty { color: var(--muted); line-height: 1.45; }
+.chat-empty p { margin: 0 0 12px; }
+.chat-empty b { color: var(--black); font-weight: 600; }
+.chat-examples { display: flex; flex-wrap: wrap; gap: 6px; }
+.chat-examples button {
+  padding: 6px 10px;
+  border: 1px solid var(--panel-line);
+  border-radius: 999px;
+  background: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+.chat-examples button:hover { border-color: var(--accent); color: var(--accent); }
+.chat-empty .chat-tip { margin: 10px 0 0; font-size: 13px; }
+
+.chat-msg { position: relative; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-copy {
+  position: absolute;
+  top: 100%;
+  z-index: 1;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s;
+}
+/* User and assistant messages reserve a row below for the copy button, and that whole
+   row (plus the flex gap) counts as hovering the message. */
+.chat-msg.user,
+.chat-msg.assistant { margin-bottom: 16px; }
+.chat-msg.user::after,
+.chat-msg.assistant::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: 24px; /* margin-bottom + the log's 8px gap */
+}
+.chat-msg.user:has(+ .chat-msg:not(.user))::after { height: 28px; } /* plus the 4px margin-top below */
+.chat-msg.user .chat-copy { top: calc(100% + 2px); right: 0; }
+.chat-msg.assistant .chat-copy { top: 100%; left: -4px; } /* line-height already adds a little air */
+.chat-msg:hover .chat-copy,
+.chat-copy:focus-visible,
+.chat-copy.copied { opacity: 1; pointer-events: auto; }
+.chat-copy:hover { background: rgba(31, 41, 51, 0.07); color: var(--black); }
+.chat-copy.copied { color: #30a46c; }
+.chat .chat-copy svg { width: 15px; height: 15px; }
+.chat-msg.user {
+  align-self: flex-end;
+  max-width: 85%;
+  padding: 7px 12px;
+  border-radius: 11px;
+  background: var(--accent);
+  color: #fff;
+}
+.chat-msg.user + .chat-msg:not(.user) { margin-top: 4px; }
+.chat-msg.assistant { align-self: flex-start; max-width: 95%; }
+.chat-msg.error { color: #c62a2f; font-size: 13px; }
+.chat-msg.working { display: flex; align-items: center; gap: 4px; padding: 6px 0; }
+.chat-msg.working i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  opacity: 0.3;
+  animation: chat-dot 1s infinite ease-in-out;
+}
+.chat-msg.working i:nth-child(2) { animation-delay: 0.15s; }
+.chat-msg.working i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes chat-dot { 40% { opacity: 1; transform: translateY(-2px); } }
+.chat-status { margin-left: 6px; font-size: 13px; color: var(--muted); }
+
+/* The model's thinking: muted, and folded away once it's done. */
+.chat-msg.thinking-log { align-self: stretch; margin-bottom: 10px; font-size: 13px; color: var(--muted); }
+.chat-thinking-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.chat-thinking-toggle:hover { color: #374151; }
+.chat-thinking-toggle svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; transition: transform 0.15s; }
+.chat-msg.thinking-log.open .chat-thinking-toggle svg { transform: rotate(90deg); }
+.chat-thinking-text {
+  margin-top: 4px;
+  padding-left: 10px;
+  border-left: 2px solid color-mix(in srgb, currentColor 25%, transparent);
+  max-height: 220px;
+  overflow-y: auto;
+}
+/* While streaming it grows freely, so new text lands in the chat log, which follows it; a box with
+   its own scrollbar would hide the newest lines at its bottom. */
+.chat-msg.thinking-log.live .chat-thinking-text { max-height: none; overflow: visible; }
+.chat-thinking-text p { margin: 0; }
+.chat-thinking-text p + p { margin-top: 10px; }
+
+.chat-input {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 10px 10px;
+  padding: 6px 6px 6px 12px;
+  border: 1px solid var(--panel-line);
+  border-radius: 12px;
+  background: #fff;
+}
+.chat-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(62, 99, 221, 0.12); }
+.chat-input textarea {
+  flex: 1;
+  resize: none;
+  border: none;
+  outline: none;
+  padding: 5px 0;
+  font: inherit;
+  line-height: 1.4;
+  color: inherit;
+  background: transparent;
+}
+.chat-input-bar { display: flex; align-items: center; gap: 8px; margin-left: -6px; }
+.chat-input-gap { flex: 1; }
+.chat-attach { position: relative; }
+.chat-plus {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.chat-plus svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; }
+.chat-plus:hover:not(:disabled), .chat-plus.on { background: rgba(31, 41, 51, 0.07); color: var(--black); }
+.chat-plus:disabled { opacity: 0.4; cursor: default; }
+.chat-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 5;
+  min-width: 160px;
+  padding: 4px;
+  border: 1px solid var(--panel-line);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 6px 20px rgba(31, 41, 51, 0.14);
+}
+.chat-menu button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.chat-menu button:hover, .chat-menu button:focus-visible { background: rgba(31, 41, 51, 0.07); outline: none; }
+.chat-menu svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; }
+.chat-attachments { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 4px; }
+.chat-attachment { position: relative; width: 56px; height: 56px; }
+.chat-attachment img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; border: 1px solid var(--panel-line); }
+.chat-attachment button {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--black);
+  color: #fff;
+  cursor: pointer;
+}
+.chat-attachment button svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.chat-msg.has-images { display: flex; flex-direction: column; gap: 6px; }
+.chat-msg-images { display: flex; flex-wrap: wrap; gap: 6px; }
+.chat-msg-images img { max-width: 140px; max-height: 140px; border-radius: 7px; display: block; }
+.chat-send {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+.chat-send svg { stroke-width: 2; }
+.chat-send:disabled { background: rgba(31, 41, 51, 0.12); cursor: default; }
+.chat-send.stop { background: #d9484d; }
+.chat-send.stop:hover { background: #c53a3f; }
+.chat-send + .chat-send { margin-left: -4px; } /* stop and send now sit together as a pair */
+.chat-send.stop rect { fill: currentColor; stroke: none; }
+
+.chat-settings {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.chat-settings p { margin: 0; color: var(--muted); line-height: 1.45; }
+.chat-settings .hint { font-size: 12px; }
+.chat-settings code { font-size: 11px; background: rgba(31, 41, 51, 0.06); padding: 1px 4px; border-radius: 4px; }
+.chat-settings label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; }
+.chat-settings .optional { font-weight: 400; color: var(--muted); }
+.chat-settings input {
+  padding: 8px 10px;
+  border: 1px solid var(--panel-line);
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 400;
+  outline: none;
+}
+.chat-settings input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(62, 99, 221, 0.12); }
+.chat-seg { display: flex; padding: 3px; border-radius: 9px; background: rgba(31, 41, 51, 0.06); }
+.chat-seg button {
+  flex: 1;
+  padding: 6px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  font-size: 13px;
+  cursor: pointer;
+}
+.chat-seg button.on { background: #fff; box-shadow: 0 1px 3px rgba(31, 41, 51, 0.15); font-weight: 600; }
+.chat-save {
+  align-self: flex-end;
+  padding: 8px 18px;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+.chat-save:disabled { opacity: 0.4; cursor: default; }
+
+/* While typing a message the pointer only aims: the marker below stands in for the cursor, and the
+   tools' cursors are hidden. !important outranks every tool and modifier cursor. */
+svg.canvas.aiming, svg.canvas.aiming * { cursor: none !important; }
+/* The shape under the pointer glows blue in any tool: it is what "this" will mean. The selection's
+   handles and box let the pointer through (a press there only ends typing), so the glow lands on the
+   same shape the assistant is told about, which looks through them too. */
+svg.canvas.aiming .selection * { pointer-events: none !important; }
+svg.canvas.aiming .shape .halo { display: none !important; }
+svg.canvas.aiming .shape:hover .halo { display: inline !important; --halo-color: var(--accent) !important; }
+
+/* Where "here" is while typing a message. Two tones, like the cursors: a white casing under a blue
+   line, so one of them always contrasts with what's beneath (the blue on light fills and the page,
+   the white on dark or blue ones). Inverting the backdrop instead vanishes over mid-tones. */
+.here-marker {
+  position: fixed;
+  width: 24px;
+  height: 24px;
+  margin: -12px 0 0 -12px;
+  pointer-events: none;
+  z-index: 1;
+  overflow: visible; /* the casing's round caps reach just past the 24-unit box */
+  fill: none;
+  stroke-linecap: round;
+}
+.here-marker .casing { stroke: #fff; stroke-width: 3; }
+.here-marker .ink { stroke: var(--accent); stroke-width: 1.5; }
+.here-marker .ink circle { fill: rgba(62, 99, 221, 0.12); }
+
+/* Where the pointer is while the system hides it after typing, until the mouse moves. */
+.pointer-hint {
+  position: fixed;
+  pointer-events: none;
+  z-index: 10;
+  filter: drop-shadow(0 0 1px #fff);
+}
+.pointer-hint svg {
+  position: absolute;
+  fill: none;
+  stroke: var(--muted);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.pointer-hint-ring {
+  width: 22px;
+  height: 22px;
+  left: -11px;
+  top: -11px;
+  stroke-width: 1.4; /* 1.5px on screen, since the 20-unit drawing is shown at 22px */
+}
+/* Beside the ring, lower right, like the shape tool's cursor shows its shape. */
+.pointer-hint-tool {
+  width: 25px;
+  height: 25px;
+  left: 3px;
+  top: 3px;
+  stroke-width: 1.2; /* 1.5px on screen, since the 20-unit drawing is shown at 25px */
+}
+/* The cursor's own image, a quarter larger than on the canvas so it reads at a glance. */
+img.pointer-hint-tool { position: absolute; width: auto; height: auto; transform: scale(1.25); transform-origin: 0 0; }
+/* The pen's drawing leaves more blank space than the others, so it sits a little up and right of them to look the same distance away. */
+img.pointer-hint-tool.pen { left: 3px; top: 1px; }
+
+/* ---- tooltip (shared; see Tooltip.tsx) ---- */
+.tooltip {
+  position: fixed;
+  z-index: 30;
+  padding: 5px 9px;
+  border-radius: 6px;
+  background: var(--black);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.3;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(31, 41, 51, 0.18);
+  animation: tooltip-in 90ms ease-out;
+}
+@keyframes tooltip-in { from { opacity: 0; } }

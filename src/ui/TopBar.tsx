@@ -1,5 +1,8 @@
+import { useChat } from '../ai/chat';
 import { kbd } from '../platform';
+import { useSession, type SaveStatus } from '../session';
 import { useStore } from '../store';
+import { SparkleIcon } from './ChatPanel';
 import { FileMenu } from './FileMenu';
 
 /** App identity, the File menu, and a few always-useful commands. Creation and editing stay in the pie menu. */
@@ -11,6 +14,8 @@ export function TopBar() {
   const empty = useStore((s) => s.shapes.length === 0);
   const canPaste = useStore((s) => s.clipboard !== null);
   const gesturesOn = useStore((s) => s.gesturesOn);
+  const chatOpen = useChat((s) => s.open);
+  const autosave = useSession((s) => s.enabled);
   const st = useStore.getState;
 
   return (
@@ -26,16 +31,31 @@ export function TopBar() {
           {fileName ?? 'Untitled'}
           {dirty && <span className="dirty" title="Unsaved changes"> •</span>}
         </span>
+        <SaveIndicator />
       </div>
       {/* Mouse clicks don't focus the buttons, so a later key press doesn't leave a focus ring behind. */}
       <nav className="topbar-actions" onMouseDown={(e) => e.preventDefault()}>
-        {/* A switch, not a one-shot command: the track shows the state at a glance. */}
+        {/* Switches, not one-shot commands: the track shows the state at a glance. */}
+        <button
+          className={`gesture-toggle autosave-toggle${autosave ? ' on' : ''}`}
+          role="switch"
+          aria-checked={autosave}
+          onClick={() => useSession.getState().setEnabled(!autosave)}
+          data-tip="Automatically saves the canvas and the current chat"
+          aria-label="Autosave"
+        >
+          <CloudIcon />
+          <span>Autosave</span>
+          <span className="switch" aria-hidden><span className="knob" /></span>
+        </button>
+        <span className="sep" />
         <button
           className={`gesture-toggle${gesturesOn ? ' on' : ''}`}
           role="switch"
           aria-checked={gesturesOn}
           onClick={() => st().setGesturesOn(!gesturesOn)}
-          title={gesturesOn ? 'Gestures on: strokes are recognized as commands and shapes. Click for plain drawing. (G)' : 'Gestures off: strokes stay as drawn. Click to turn gestures on. (G)'}
+          data-tip="Gestures (G)"
+          aria-label="Gestures"
         >
           <svg viewBox="0 0 20 20">
             <path d="M3 14 C5 6 8 5 9 9 S12 15 14 8" />
@@ -44,7 +64,7 @@ export function TopBar() {
           <span>Gestures</span>
           <span className="switch" aria-hidden><span className="knob" /></span>
         </button>
-        <button className="gesture-info" onClick={() => st().setGestureGuideOpen(true)} title="Gesture reference" aria-label="Gesture reference">
+        <button className="gesture-info" onClick={() => st().setGestureGuideOpen(true)} data-tip="Gesture reference" aria-label="Gesture reference">
           <svg viewBox="0 0 20 20">
             <circle cx="10" cy="10" r="7.5" />
             <path d="M10 9 V14" />
@@ -55,7 +75,8 @@ export function TopBar() {
         <button
           disabled={!canPaste}
           onClick={() => st().paste()}
-          title={canPaste ? `Paste (${kbd('mod+v')})` : 'Paste: copy or cut a shape first'}
+          data-tip={canPaste ? `Paste (${kbd('mod+v')})` : 'Paste: Copy or cut a shape first'}
+          aria-label="Paste"
         >
           <svg viewBox="0 0 20 20">
             <path d="M7 4 H5.5 V17 H14.5 V4 H13 M7.5 3 H12.5 V5.5 H7.5 Z" />
@@ -63,20 +84,30 @@ export function TopBar() {
           <span>Paste</span>
         </button>
         <span className="sep" />
-        <button disabled={!canUndo} onClick={() => st().undo()} title={`Undo (${kbd('mod+z')})`}>
+        <button disabled={!canUndo} onClick={() => st().undo()} data-tip={`Undo (${kbd('mod+z')})`} aria-label="Undo">
           <svg viewBox="0 0 20 20"><path d="M7 5 L3 9 L7 13 M3 9 H12 a4.5 4.5 0 0 1 0 9 H9" /></svg>
           <span>Undo</span>
         </button>
-        <button disabled={!canRedo} onClick={() => st().redo()} title={`Redo (${kbd('mod+shift+z')})`}>
+        <button disabled={!canRedo} onClick={() => st().redo()} data-tip={`Redo (${kbd('mod+shift+z')})`} aria-label="Redo">
           <svg viewBox="0 0 20 20"><path d="M13 5 L17 9 L13 13 M17 9 H8 a4.5 4.5 0 0 0 0 9 H11" /></svg>
           <span>Redo</span>
         </button>
         <span className="sep" />
-        <button disabled={empty} onClick={() => st().clearAll()} title="Remove every shape (undoable)">
+        <button disabled={empty} onClick={() => st().clearAll()} data-tip="Clear all" aria-label="Clear all">
           <svg viewBox="0 0 20 20"><path d="M4 6 H16 M8 6 V4 H12 V6 M6 6 L7 17 H13 L14 6" /></svg>
           <span>Clear all</span>
         </button>
-        <button className="help-btn" onClick={() => st().setHelpOpen(true)} title="Help (?)">
+        <button
+          className={chatOpen ? 'on' : ''}
+          aria-pressed={chatOpen}
+          onClick={() => useChat.getState().setOpen(!chatOpen, !chatOpen)}
+          data-tip="Assistant (/)"
+          aria-label="Assistant"
+        >
+          <SparkleIcon />
+          <span>Assistant</span>
+        </button>
+        <button className="help-btn" onClick={() => st().setHelpOpen(true)} data-tip="Help (?)" aria-label="Help">
           <svg viewBox="0 0 20 20">
             <circle cx="10" cy="10" r="7.5" />
             <path d="M7.8 8 a2.3 2.3 0 1 1 3.2 2.1 c-.7.3-1 .8-1 1.5 V12.5" />
@@ -86,5 +117,36 @@ export function TopBar() {
         </button>
       </nav>
     </header>
+  );
+}
+
+const SAVE_LABEL: Record<SaveStatus, string> = {
+  saved: 'Saved',
+  saving: 'Saving…',
+  error: 'Couldn’t save',
+};
+
+/** Whether the session is saved in this browser, as Google Docs shows beside a document's name. */
+function SaveIndicator() {
+  const enabled = useSession((s) => s.enabled);
+  const status = useSession((s) => s.status);
+  const label = enabled ? SAVE_LABEL[status] : 'Autosave off';
+  const tip = !enabled
+    ? 'Changes aren’t being saved in the browser'
+    : status === 'error'
+      ? 'The browser couldn’t save this session'
+      : 'Changes are saved in the browser';
+  return (
+    <span className={`save-status ${enabled ? status : 'off'}`} data-tip={tip} role="status">
+      {label}
+    </span>
+  );
+}
+
+function CloudIcon() {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden>
+      <path d="M6 15.5 H14.5 a3.25 3.25 0 0 0 .4 -6.48 A5 5 0 0 0 5.3 8.6 A3.45 3.45 0 0 0 6 15.5 Z" />
+    </svg>
   );
 }

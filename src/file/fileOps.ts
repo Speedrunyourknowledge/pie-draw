@@ -154,6 +154,8 @@ function validShape(s: Record<string, unknown>): boolean {
     case 'triangle':
       return isPoints(s.points, 3) && (s.points as unknown[]).length === 3;
     case 'freehand':
+      // A straight line has exactly its two ends.
+      if (s.straight !== undefined && (s.straight !== true || (s.points as unknown[]).length !== 2)) return false;
       return isPoints(s.points, 1);
   }
   return false;

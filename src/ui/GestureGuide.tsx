@@ -1,5 +1,6 @@
 import { GESTURES, GESTURE_SECTIONS, describeAction, sectionOf } from '../gestures/gestureConfig';
 import { EXAMPLE_BOX, examples } from '../gestures/examples';
+import { DEFAULT_PALETTE } from '../colors';
 import { useStore } from '../store';
 import type { Pt } from '../types';
 import { StrokeMarks } from './StrokeMarks';
@@ -43,11 +44,13 @@ export function GestureGuide() {
  * Every gesture and what it does, built from the gesture config and recorded samples. Kept apart from
  * the panel, which reads the store, so `npm run docs:gestures` can render it for the README.
  */
+/** The number gestures are shown with the default key colors, not whatever the user has put on keys 1–5. */
 export function GestureList() {
+  const palette = DEFAULT_PALETTE;
   return (
     <>
       <p>
-        With <b>gestures</b> enabled (top bar, or <Key>G</Key>), draw one of these in a single stroke. Each picture starts at
+        With <b>gestures</b> enabled (toolbar button, or <Key>G</Key>), you can draw to initiate actions. Each picture starts at
         the <span className="guide-start" aria-hidden /> green dot and follows the arrows. Turn gestures off to draw freely.
       </p>
 
@@ -71,8 +74,8 @@ export function GestureList() {
                   )}
                   <figcaption>
                     <b>
-                      {g.action.kind === 'setColor' && <span className="guide-swatch" style={{ background: g.action.color }} />}
-                      {describeAction(g.action)}
+                      {g.action.kind === 'setColor' && <span className="guide-swatch" style={{ background: palette[g.action.slot] }} />}
+                      {describeAction(g.action, palette)}
                     </b>
                     <span>{g.hint}</span>
                   </figcaption>

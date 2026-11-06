@@ -1,10 +1,12 @@
 import { useEffect } from 'react';
 import { Canvas } from './canvas/Canvas';
+import { ChatPanel } from './ui/ChatPanel';
 import { useStore } from './store';
 import { ColorPicker } from './ui/ColorPicker';
 import { GestureGuide } from './ui/GestureGuide';
 import { HelpPanel } from './ui/HelpPanel';
 import { Toast } from './ui/Toast';
+import { Tooltip } from './ui/Tooltip';
 import { TopBar } from './ui/TopBar';
 import { NavControls } from './ui/NavControls';
 import { RecordMode } from './ui/RecordMode';
@@ -31,10 +33,12 @@ export default function App() {
         </div>
         <NavControls />
       </div>
+      <ChatPanel />
       <HelpPanel />
       <GestureGuide />
       <Toast />
       <RecordMode />
+      <Tooltip />
     </div>
   );
 }

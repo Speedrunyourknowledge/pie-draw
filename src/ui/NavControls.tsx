@@ -1,5 +1,4 @@
 import { useStore, type Tool } from '../store';
-import { kbd } from '../platform';
 import { resetZoom, zoomIn, zoomOut } from '../view';
 
 /** Tool and navigation cluster: select, hand (pan) and eraser tools, then zoom, stacked in the lower right. */
@@ -16,7 +15,7 @@ export function NavControls() {
         className={tool === 'select' ? 'on' : ''}
         onClick={() => toggle('select')}
         aria-pressed={tool === 'select'}
-        title="Select tool: drag a box to select every shape it touches (V). Or Shift-drag"
+        data-tip-side="left" data-tip="Select (V)"
         aria-label="Select tool"
       >
         <svg viewBox="0 0 20 20">
@@ -28,7 +27,7 @@ export function NavControls() {
         className={tool === 'hand' ? 'on' : ''}
         onClick={() => toggle('hand')}
         aria-pressed={tool === 'hand'}
-        title="Hand tool: drag to pan (H). Or hold the scroll wheel / Space and drag"
+        data-tip-side="left" data-tip="Hand (H)"
         aria-label="Hand tool"
       >
         <svg viewBox="0 0 20 20">
@@ -39,20 +38,20 @@ export function NavControls() {
         className={tool === 'eraser' ? 'on' : ''}
         onClick={() => toggle('eraser')}
         aria-pressed={tool === 'eraser'}
-        title="Eraser: click or drag across shapes to erase them (E)"
+        data-tip-side="left" data-tip="Eraser (E)"
         aria-label="Eraser"
       >
         <svg viewBox="0 0 20 20">
           <path d="M8.2 16.5 L3.6 11.9 a1.4 1.4 0 0 1 0 -2 L10.4 3.1 a1.4 1.4 0 0 1 2 0 L16.9 7.6 a1.4 1.4 0 0 1 0 2 L10 16.5 Z M6.6 8.3 L11.7 13.4 M8.2 16.5 H16.5" />
         </svg>
       </button>
-      <button onClick={zoomIn} title={`Zoom in (+ or ${kbd('mod+=')})`} aria-label="Zoom in">
+      <button onClick={zoomIn} data-tip-side="left" data-tip="Zoom in (+)" aria-label="Zoom in">
         <svg viewBox="0 0 20 20"><path d="M10 5 V15 M5 10 H15" /></svg>
       </button>
-      <button className="zoom-level" onClick={resetZoom} title="Reset to 100% (0)">
+      <button className="zoom-level" onClick={resetZoom} data-tip-side="left" data-tip="Reset zoom (0)">
         {Math.round(zoom * 100)}%
       </button>
-      <button onClick={zoomOut} title={`Zoom out (− or ${kbd('mod+-')})`} aria-label="Zoom out">
+      <button onClick={zoomOut} data-tip-side="left" data-tip="Zoom out (−)" aria-label="Zoom out">
         <svg viewBox="0 0 20 20"><path d="M5 10 H15" /></svg>
       </button>
     </div>

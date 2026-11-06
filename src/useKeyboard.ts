@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
 import { newDoc, openDoc, saveDoc } from './file/fileOps';
-import { isMod } from './platform';
+import { useChat } from './ai/chat';
+import { isMod, isTextField } from './platform';
 import { useStore } from './store';
-import { PALETTE } from './types';
 import { fitToContent, resetZoom, selectAdjacent, zoomIn, zoomOut } from './view';
 
 const PAN_STEP = 60;
@@ -17,6 +17,7 @@ export function useKeyboard(onEscape: () => void, onMenuKey: (e: KeyboardEvent) 
       let handled = true;
 
       if (st.recordOpen) return; // record mode handles its own keys
+      if (isTextField(e.target)) return; // typing in the chat or settings
 
       if (st.helpOpen) {
         // The help panel only listens for ways to close it.
@@ -32,6 +33,10 @@ export function useKeyboard(onEscape: () => void, onMenuKey: (e: KeyboardEvent) 
         if (handled) e.preventDefault();
         return;
       }
+
+      // With text highlighted (e.g. in a chat message), ⌘C / ⌘X copy that text as usual
+      // rather than the selected shapes.
+      if (mod && (key === 'c' || key === 'x') && !(window.getSelection()?.isCollapsed ?? true)) return;
 
       if (onMenuKey(e)) {
         e.preventDefault();
@@ -57,6 +62,7 @@ export function useKeyboard(onEscape: () => void, onMenuKey: (e: KeyboardEvent) 
       else if (key === 'delete' || key === 'backspace') st.deleteSelected();
       else if (key === 'escape') onEscape();
       else if (key === '?' || (key === '/' && e.shiftKey)) st.setHelpOpen(true);
+      else if (key === '/') useChat.getState().setOpen(true, true);
       else if (key === '=' || key === '+') zoomIn();
       else if (key === '-' || key === '_') zoomOut();
       else if (key === '0') resetZoom();
@@ -69,11 +75,14 @@ export function useKeyboard(onEscape: () => void, onMenuKey: (e: KeyboardEvent) 
       else if (key === 'h') st.setTool(st.tool === 'hand' ? 'draw' : 'hand');
       else if (key === 'e') st.setTool(st.tool === 'eraser' ? 'draw' : 'eraser');
       else if (key === 'g') st.setGesturesOn(!st.gesturesOn);
-      // Shift+digit (matched by physical key, since Shift changes e.key) sets the fill; 0 clears it.
-      else if (e.shiftKey && /^Digit[0-5]$/.test(e.code)) {
+      // Shift+digit (matched by physical key, since Shift changes e.key) sets the fill; 6, next after
+      // the five color keys, clears it.
+      else if (e.shiftKey && /^Digit[1-6]$/.test(e.code)) {
         const n = Number(e.code.slice(5));
-        st.setFill(n === 0 ? null : PALETTE[n - 1].value);
-      } else if (/^[1-5]$/.test(key)) st.setColor(PALETTE[Number(key) - 1].value);
+        st.setFill(n === 6 ? null : st.palette[n - 1]);
+      } else if (/^[1-5]$/.test(key)) st.setColor(st.palette[Number(key) - 1]);
+      // R turns the selection a quarter turn clockwise, Shift+R counterclockwise.
+      else if (key === 'r') st.rotateSelection(e.shiftKey ? -90 : 90);
       else if (key.startsWith('arrow')) {
         const dx = key === 'arrowleft' ? -1 : key === 'arrowright' ? 1 : 0;
         const dy = key === 'arrowup' ? -1 : key === 'arrowdown' ? 1 : 0;

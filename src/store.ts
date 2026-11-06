@@ -1,9 +1,10 @@
 import { create } from 'zustand';
-import { canFill, groupBounds, newId } from './geometry';
+import { DEFAULT_PALETTE, MAX_SWATCHES, loadPalette, loadSwatches, storePalette, storeSwatches } from './colors';
+import { canFill, frameOf, groupBounds, groupFrame, newId, normAngle, rotateAbout } from './geometry';
 import { kbd } from './platform';
 import { PALETTE, type PrimitiveType, type Shape, type TransformPatch } from './types';
 
-export type Mode = 'idle' | 'drawing' | 'selecting' | 'dragging' | 'scaling' | 'erasing' | 'menuOpen';
+export type Mode = 'idle' | 'drawing' | 'selecting' | 'dragging' | 'scaling' | 'rotating' | 'erasing' | 'menuOpen';
 /**
  * What a plain left-drag does: draw/move (default), box-select, pan the view, erase whole shapes,
  * or create one shape of `createType` (chosen from the pie menu).
@@ -44,6 +45,8 @@ interface AppState {
   clipboard: Shape[] | null;
   currentColor: string; // line color for new shapes and strokes
   currentFill: string | null; // fill for new closed shapes; null = outline only
+  palette: string[]; // the colors on keys 1–5 (and the number gestures), in that order
+  swatches: string[]; // saved custom colors, shown in the swatch fan's outer row
   mode: Mode;
   fileHandle: FileSystemFileHandle | null; // for Save vs Save As
   fileName: string | null;
@@ -65,10 +68,14 @@ interface AppState {
   /** Records the current shapes for undo. Call once before a change (or at the start of a drag). */
   checkpoint: () => void;
   addShape: (shape: Shape, select?: boolean) => void;
+  /** Adds several shapes as one undo step and selects them. */
+  addShapes: (shapes: Shape[]) => void;
   /** Live update without a history entry; pair with checkpoint() at gesture start. */
   updateShape: (id: string, patch: TransformPatch) => void;
   /** Live update of several shapes at once (group move / scale), also without a history entry. */
   updateShapes: (patches: Map<string, TransformPatch>) => void;
+  /** Live replacement of a whole shape (a line's ends moved), without a history entry. */
+  putShape: (shape: Shape) => void;
   /** Live removal without a history entry; pair with checkpoint() at gesture start. */
   eraseShape: (id: string) => void;
   /** Selects just this shape, or nothing. */
@@ -92,6 +99,26 @@ interface AppState {
   setFill: (fill: string | null) => void;
   /** Changes one closed shape's fill and makes it the default fill. */
   refill: (id: string, fill: string | null) => void;
+  /**
+   * Live line or fill change while a color is being dragged in the color editor: like setColor /
+   * setFill but without a history entry. Pair with checkpoint() before the first change.
+   */
+  paintLive: (kind: 'line' | 'fill', color: string | null) => void;
+  /**
+   * Puts a color on key 1–5 (slot 0–4). A color is only ever on one key: if it is already on
+   * another key, the two keys swap instead, and that other slot is returned (otherwise null).
+   */
+  setPaletteSlot: (slot: number, color: string) => number | null;
+  /** Exchanges the colors on two keys. */
+  swapPaletteSlots: (a: number, b: number) => void;
+  resetPalette: () => void;
+  /** Adds a color to the saved swatches (dropping the oldest when full). */
+  saveSwatch: (color: string) => void;
+  removeSwatch: (color: string) => void;
+  /** Turns the selection by `deg` degrees about the middle of its box, as one undo step. */
+  rotateSelection: (deg: number) => void;
+  /** Sets each selected shape's angle, each turning about its own middle, as one undo step. */
+  setRotation: (deg: number) => void;
   setDropTarget: (id: string | null) => void;
   setTool: (tool: Tool) => void;
   /** Switches to the create tool, armed with this shape. */
@@ -152,6 +179,8 @@ export const useStore = create<AppState>()((set, get) => {
     clipboard: null,
     currentColor: PALETTE[0].value,
     currentFill: null,
+    palette: loadPalette(),
+    swatches: loadSwatches(),
     mode: 'idle',
     fileHandle: null,
     fileName: null,
@@ -178,10 +207,17 @@ export const useStore = create<AppState>()((set, get) => {
         selectedIds: select ? [shape.id] : get().selectedIds,
       }),
 
+    addShapes: (added) => {
+      if (added.length === 0) return;
+      change({ shapes: [...get().shapes, ...added], selectedIds: added.map((s) => s.id) });
+    },
+
     updateShape: (id, patch) =>
       set((st) => ({
         shapes: st.shapes.map((s) => (s.id === id ? { ...s, ...patch } : s)),
       })),
+
+    putShape: (shape) => set((st) => ({ shapes: st.shapes.map((s) => (s.id === shape.id ? shape : s)) })),
 
     updateShapes: (patches) =>
       set((st) => ({
@@ -285,6 +321,69 @@ export const useStore = create<AppState>()((set, get) => {
       set({ currentFill: fill });
       if (s.fill === fill) return;
       change({ shapes: get().shapes.map((x) => (x.id === id ? { ...x, fill } : x)) });
+    },
+
+    paintLive: (kind, color) => {
+      const key = kind === 'line' ? 'stroke' : 'fill';
+      const { selectedIds } = get();
+      set((st) => ({
+        ...(kind === 'line' ? { currentColor: color ?? st.currentColor } : { currentFill: color }),
+        shapes: st.shapes.map((x) =>
+          selectedIds.includes(x.id) && (kind === 'line' || canFill(x)) ? { ...x, [key]: color } : x,
+        ),
+      }));
+    },
+
+    setPaletteSlot: (slot, color) => {
+      const palette = [...get().palette];
+      const other = palette.findIndex((c, i) => i !== slot && c.toLowerCase() === color.toLowerCase());
+      if (other !== -1) palette[other] = palette[slot];
+      palette[slot] = color;
+      storePalette(palette);
+      set({ palette });
+      return other === -1 ? null : other;
+    },
+
+    swapPaletteSlots: (a, b) => {
+      const palette = [...get().palette];
+      [palette[a], palette[b]] = [palette[b], palette[a]];
+      storePalette(palette);
+      set({ palette });
+    },
+
+    resetPalette: () => {
+      const palette = [...DEFAULT_PALETTE];
+      storePalette(palette);
+      set({ palette });
+    },
+
+    saveSwatch: (color) => {
+      const swatches = [...get().swatches.filter((c) => c !== color), color].slice(-MAX_SWATCHES);
+      storeSwatches(swatches);
+      set({ swatches });
+    },
+
+    removeSwatch: (color) => {
+      const swatches = get().swatches.filter((c) => c !== color);
+      storeSwatches(swatches);
+      set({ swatches });
+    },
+
+    rotateSelection: (deg) => {
+      const sel = selected();
+      if (sel.length === 0 || normAngle(deg) === 0) return;
+      const f = groupFrame(sel);
+      const patches = rotateAbout(sel, f.cx, f.cy, deg);
+      changeSelected((s) => ({ ...s, ...patches.get(s.id) }));
+    },
+
+    setRotation: (deg) => {
+      const sel = selected();
+      if (!sel.some((s) => normAngle(s.rotation - deg) !== 0)) return;
+      changeSelected((s) => {
+        const f = frameOf(s);
+        return { ...s, ...rotateAbout([s], f.cx, f.cy, deg - s.rotation).get(s.id) };
+      });
     },
 
     setDropTarget: (dropTargetId) => set({ dropTargetId }),
