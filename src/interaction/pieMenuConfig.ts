@@ -75,12 +75,36 @@ export const canvasMenu = (palette: readonly string[]): PieItem[] => [
   fillItem('draw-fill', palette),
 ];
 
+/** Position submenu: where the selection sits in the stack, top to bottom going clockwise. */
+const positionItem: PieItem = {
+  id: 'position',
+  label: 'Position',
+  icon: 'position',
+  children: [
+    { id: 'front', label: 'To Front', icon: 'front', run: () => st().bringToFront() },
+    { id: 'forward', label: 'Forward', icon: 'forward', run: () => st().stepSelection('forward') },
+    { id: 'backward', label: 'Backward', icon: 'backward', run: () => st().stepSelection('backward') },
+    { id: 'back', label: 'To Back', icon: 'back', run: () => st().sendToBack() },
+  ],
+};
+
+/** Flip submenu: mirror the selection left-right or top-bottom. */
+const flipItem: PieItem = {
+  id: 'flip',
+  label: 'Flip',
+  icon: 'flip',
+  children: [
+    { id: 'flip-h', label: 'Horizontal', icon: 'flipH', run: () => st().flipSelection('horizontal') },
+    { id: 'flip-v', label: 'Vertical', icon: 'flipV', run: () => st().flipSelection('vertical') },
+  ],
+};
+
 export const shapeMenu = (palette: readonly string[]): PieItem[] => [
   lineItem('line', palette),
   { id: 'copy', label: 'Copy', icon: 'copy', run: () => st().copy() },
-  { id: 'front', label: 'To Front', icon: 'front', run: () => st().bringToFront() },
+  positionItem,
   { id: 'delete', label: 'Delete', icon: 'delete', run: () => st().deleteSelected() },
-  { id: 'back', label: 'To Back', icon: 'back', run: () => st().sendToBack() },
+  flipItem,
   { id: 'cut', label: 'Cut', icon: 'cut', run: () => st().cut() },
   fillItem('fill', palette),
 ];

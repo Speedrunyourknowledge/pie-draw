@@ -25,6 +25,15 @@ function sector(r0: number, r1: number, a0: number, a1: number): string {
   return `M${x0} ${y0} A${r1} ${r1} 0 ${large} 1 ${x1} ${y1} L${x2} ${y2} A${r0} ${r0} 0 ${large} 0 ${x3} ${y3}Z`;
 }
 
+/** A shape and its mirror image across a dashed axis. */
+const FLIP_H = (
+  <>
+    <path d="M0 -9 V9" className="icon-dim" />
+    <polygon points="-2.5,-6 -2.5,6 -9,6" className="icon-solid" />
+    <polygon points="2.5,-6 2.5,6 9,6" />
+  </>
+);
+
 const ICONS: Record<string, ReactNode> = {
   square: <rect x={-7} y={-7} width={14} height={14} />,
   rectangle: <rect x={-9} y={-6} width={18} height={12} />,
@@ -47,16 +56,24 @@ const ICONS: Record<string, ReactNode> = {
     </>
   ),
   delete: <path d="M-7 -5 h14 M-2 -5 v-2 h4 v2 M-5 -5 l1 12 h8 l1 -12" />,
-  front: (
+  position: (
     <>
       <rect x={-7} y={-1} width={9} height={8} className="icon-dim" />
       <rect x={-2} y={-7} width={9} height={8} className="icon-solid" />
     </>
   ),
-  back: (
+  // The stack moves: a bar marks all the way to the top or bottom, a plain arrow one step.
+  front: <path d="M-6 -8 H6 M0 8 V-4 M-4.5 0.5 L0 -4 L4.5 0.5" />,
+  forward: <path d="M0 8 V-7 M-4.5 -2.5 L0 -7 L4.5 -2.5" />,
+  backward: <path d="M0 -8 V7 M-4.5 2.5 L0 7 L4.5 2.5" />,
+  back: <path d="M-6 8 H6 M0 -8 V4 M-4.5 -0.5 L0 4 L4.5 -0.5" />,
+  flip: FLIP_H,
+  flipH: FLIP_H,
+  flipV: (
     <>
-      <rect x={-2} y={-7} width={9} height={8} className="icon-solid" />
-      <rect x={-7} y={-1} width={9} height={8} className="icon-dim" />
+      <path d="M-9 0 H9" className="icon-dim" />
+      <polygon points="-6,-2.5 6,-2.5 -6,-9" className="icon-solid" />
+      <polygon points="-6,2.5 6,2.5 -6,9" />
     </>
   ),
 };

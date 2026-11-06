@@ -458,6 +458,34 @@ export function rotateAbout(shapes: Shape[], cx: number, cy: number, deg: number
   );
 }
 
+/**
+ * The same shape mirrored across a line through (cx, cy): a vertical line for `horizontal` (left and
+ * right swap), a horizontal one for `vertical`. Mirroring reverses the turn, and a shape that isn't
+ * symmetric (a triangle or a stroke) has its own points mirrored too.
+ */
+export function flipAbout(s: Shape, axis: 'horizontal' | 'vertical', cx: number, cy: number): Shape {
+  const h = axis === 'horizontal';
+  const moved = { ...s, x: h ? 2 * cx - s.x : s.x, y: h ? s.y : 2 * cy - s.y, rotation: normAngle(-s.rotation) };
+  if (moved.type !== 'triangle' && moved.type !== 'freehand') return moved;
+  return { ...moved, points: moved.points.map(([x, y]): Pt => (h ? [-x, y] : [x, -y])) };
+}
+
+/**
+ * Moves the shapes picked by `chosen` one step toward the top (`forward`) or bottom of `shapes`
+ * (bottom first), past the next shape that isn't picked. Picked shapes keep their order among
+ * themselves, and a run of them moves as one.
+ */
+export function stepOrder<T>(shapes: T[], chosen: (s: T) => boolean, dir: 'forward' | 'backward'): T[] {
+  const out = [...shapes];
+  const swap = (i: number, j: number) => ([out[i], out[j]] = [out[j], out[i]]);
+  if (dir === 'forward') {
+    for (let i = out.length - 2; i >= 0; i--) if (chosen(out[i]) && !chosen(out[i + 1])) swap(i, i + 1);
+  } else {
+    for (let i = 1; i < out.length; i++) if (chosen(out[i]) && !chosen(out[i - 1])) swap(i, i - 1);
+  }
+  return out;
+}
+
 /** Whether the shapes can only scale evenly: squares and circles keep their identity. */
 export function mustScaleEvenly(shapes: Shape[]): boolean {
   return shapes.some(keepsAspect);
@@ -566,23 +594,64 @@ export function lineWithEnds(s: Freehand, a: Pt, b: Pt): Freehand {
 }
 
 /**
- * Where a triangle's third corner goes, given the side a-b: onto a right angle at a or b, or onto the
- * line through the middle of the side where the other two sides come out equal, when the point is
- * within `tol` of one; else where it is. `from` is where the line it snapped to starts.
+ * A guide a triangle's third corner can snap onto, given its first side a-b: the line at a right angle
+ * to the side at `a` or `b`; the line through the side's middle (`mid`), where the other two sides
+ * come out equal; or the circle around `a` or `b` (`ringA`, `ringB`) through the side's other end,
+ * where the side from that end comes out as long as the first side.
  */
-export function snapTriangleTip(a: Pt, b: Pt, p: Pt, tol: number): { p: Pt; from: 'a' | 'b' | 'mid' | null } {
+export type TipGuide = 'a' | 'b' | 'mid' | 'ringA' | 'ringB';
+
+/**
+ * Where a triangle's third corner goes, given the side a-b: onto the corner of an equilateral or
+ * right isosceles triangle, else onto the nearest guide (see TipGuide), when the point is within
+ * `tol` of one; else where it is. `from` lists every guide the corner ends up on.
+ */
+export function snapTriangleTip(a: Pt, b: Pt, p: Pt, tol: number): { p: Pt; from: TipGuide[] } {
   const len = dist(a, b);
-  if (len === 0) return { p, from: null };
+  if (len === 0) return { p, from: [] };
   const n: Pt = [-(b[1] - a[1]) / len, (b[0] - a[0]) / len]; // across the side
   const mid: Pt = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-  let best: { p: Pt; from: 'a' | 'b' | 'mid'; d: number } | null = null;
-  for (const [from, o] of [['a', a], ['b', b], ['mid', mid]] as const) {
-    const t = (p[0] - o[0]) * n[0] + (p[1] - o[1]) * n[1];
-    const q: Pt = [o[0] + n[0] * t, o[1] + n[1] * t];
+  const at = (o: Pt, t: number): Pt => [o[0] + n[0] * t, o[1] + n[1] * t];
+
+  // Where two guides cross: these win over a single guide, so the special triangles are easy to hit.
+  const h = (len * Math.sqrt(3)) / 2;
+  const crossings: [Pt, TipGuide[]][] = [];
+  for (const s of [1, -1]) {
+    crossings.push([at(mid, s * h), ['mid', 'ringA', 'ringB']], [at(a, s * len), ['a', 'ringA']], [at(b, s * len), ['b', 'ringB']]);
+  }
+  let best: { p: Pt; from: TipGuide[]; d: number } | null = null;
+  for (const [q, from] of crossings) {
     const d = dist(p, q);
     if (d <= tol && (!best || d < best.d)) best = { p: q, from, d };
   }
-  return best ? { p: best.p, from: best.from } : { p, from: null };
+  if (best) return { p: best.p, from: best.from };
+
+  for (const [from, o] of [['a', a], ['b', b], ['mid', mid]] as const) {
+    const q = at(o, (p[0] - o[0]) * n[0] + (p[1] - o[1]) * n[1]);
+    const d = dist(p, q);
+    if (d <= tol && (!best || d < best.d)) best = { p: q, from: [from], d };
+  }
+  for (const [from, o] of [['ringA', a], ['ringB', b]] as const) {
+    const r = dist(p, o);
+    if (r === 0) continue;
+    const q: Pt = [o[0] + ((p[0] - o[0]) / r) * len, o[1] + ((p[1] - o[1]) / r) * len];
+    const d = Math.abs(r - len);
+    if (d <= tol && (!best || d < best.d)) best = { p: q, from: [from], d };
+  }
+  return best ? { p: best.p, from: best.from } : { p, from: [] };
+}
+
+/**
+ * Which sides of the triangle (a, b, tip) the guides its tip snapped onto make equal, by index: 0 is
+ * a-b, 1 is b-tip, 2 is tip-a. Three means equilateral, two isosceles.
+ */
+export function equalSides(from: TipGuide[]): number[] {
+  const sides = new Set<number>();
+  for (const g of from) {
+    const pair = g === 'mid' ? [1, 2] : g === 'ringA' ? [2, 0] : g === 'ringB' ? [1, 0] : [];
+    pair.forEach((i) => sides.add(i));
+  }
+  return [...sides].sort();
 }
 
 /** Twice a triangle's area: zero when its corners are in a line. */

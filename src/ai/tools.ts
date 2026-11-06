@@ -55,7 +55,7 @@ const areaParam = {
 const colorParam = (what: string) => ({ type: 'string', description: `${what} ${COLOR_HELP}` });
 const idsParam = { type: 'array', items: { type: 'string' }, description: 'Act on these shapes instead of the selection. They become the selection.' };
 /** Tools that act on the selection and also take ids, to skip a select_shapes call. */
-const TAKES_IDS = new Set(['move_selection', 'scale_selection', 'rotate_selection', 'copy', 'cut', 'delete_selection', 'color_selection', 'arrange']);
+const TAKES_IDS = new Set(['move_selection', 'scale_selection', 'rotate_selection', 'copy', 'cut', 'delete_selection', 'color_selection', 'arrange', 'flip_selection']);
 
 export const TOOLS: ToolSpec[] = [
   {
@@ -171,6 +171,11 @@ export const TOOLS: ToolSpec[] = [
     parameters: { type: 'object', properties: { degrees: int, absolute: { type: 'boolean' }, ids: idsParam }, required: ['degrees'] },
   },
   {
+    name: 'flip_selection',
+    description: 'Mirrors the selected shapes across the center of their joint box: horizontal swaps left and right, vertical swaps top and bottom. A rotated shape comes out turned the other way.',
+    parameters: { type: 'object', properties: { axis: { type: 'string', enum: ['horizontal', 'vertical'] }, ids: idsParam }, required: ['axis'] },
+  },
+  {
     name: 'copy',
     description: 'Copies the selected shapes to the clipboard.',
     parameters: { type: 'object', properties: { ids: idsParam } },
@@ -261,8 +266,8 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'arrange',
-    description: 'Brings the selected shapes to the front or sends them to the back.',
-    parameters: { type: 'object', properties: { to: { type: 'string', enum: ['front', 'back'] }, ids: idsParam }, required: ['to'] },
+    description: 'Changes where the selected shapes sit in the stack: front or back moves them all the way to the top or bottom; forward or backward moves them one step, past the next shape above or below. They keep their order among themselves.',
+    parameters: { type: 'object', properties: { to: { type: 'string', enum: ['front', 'forward', 'backward', 'back'] }, ids: idsParam }, required: ['to'] },
   },
   {
     name: 'undo_redo',
@@ -899,10 +904,18 @@ function run(name: string, input: Record<string, unknown>, pointing: Pointing): 
 
     case 'arrange': {
       needSelection();
-      const to = oneOf(input, 'to', ['front', 'back'] as const)!;
+      const to = oneOf(input, 'to', ['front', 'forward', 'backward', 'back'] as const)!;
       if (to === 'front') st.bringToFront();
-      else st.sendToBack();
-      return { result: `Moved selection to the ${to}` };
+      else if (to === 'back') st.sendToBack();
+      else st.stepSelection(to);
+      return { result: to === 'front' || to === 'back' ? `Moved selection to the ${to}` : `Moved selection one step ${to}` };
+    }
+
+    case 'flip_selection': {
+      needSelection();
+      const axis = oneOf(input, 'axis', ['horizontal', 'vertical'] as const)!;
+      st.flipSelection(axis);
+      return { result: `Flipped ${plural(st.selectedIds.length, 'shape')} ${axis}ly` };
     }
 
     case 'undo_redo': {

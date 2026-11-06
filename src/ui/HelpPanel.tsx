@@ -84,12 +84,15 @@ export function HelpPanel() {
             <h3>Draw and Edit</h3>
             <ul className="help-list">
               <li><b>Choose a shape from the menu</b>, then drag to draw it (Shift keeps the sides equal), or click to place it at a default size. For triangles, drag to draw one side, then click to place the third corner.</li>
+              <li><b>The triangle tool</b> snaps to right, isosceles, and equilateral triangles.</li>
               <li><b>Click and drag on empty space</b> to sketch. Sketch a shape and a faded preview will appear if the shape is recognized.</li>
               <li><b>Start sketching then hold Shift</b> to get a straight line.</li>
               <li><b>Select a straight line</b> then drag its endpoints to stretch it. Line endpoints snap to each other and to shape corners.</li>
               <li><b>Select a shape</b> then drag to move it.</li>
               <li><b>Drag a corner or edge of a shape</b> to scale it (Shift keeps proportions), or pinch on a trackpad.</li>
               <li><b>Drag the round handle above a shape</b> to rotate it. Double-click it to make the shape upright again.</li>
+              <li><b>Flip a shape</b> horizontally or vertically from its menu.</li>
+              <li><b>Change the position</b> of a shape in the stack (forward or backward) from its menu.</li>
             </ul>
             <h3>Select Multiple Shapes</h3>
             <ul className="help-list">

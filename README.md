@@ -61,21 +61,18 @@ Alternatively, you can copy `.env.example` to `.env.local` and fill in the **AI 
 
 ### Drawing and Editing
 
-- **Create shapes** from the empty-canvas menu. Choosing a shape turns the pointer into a crosshair with a small icon of that shape. Drag to draw it at any size, or click to place it at a default size. For triangles, drag to draw one side, then click to place the third corner; it snaps to right angles and equal sides. The pointer then returns to the pen.
-- **Freehand drawing** with live shape recognition. If a stroke closes into a recognized shape, a **preview** of that shape appears. Release to snap to that shape.
-- **Straight lines.** Start sketching, then hold **Shift** to get a straight line.
-- **Connecting lines.** Select a straight line, then drag its endpoints to stretch it. Line endpoints snap to each other and to shape corners.
-- **Object manipulation.** Select, move, scale, and rotate objects.
-- **Multi-select.** A multi-selection acts as one object: moving, scaling, and recoloring affects all selected objects.
-- **Cut, copy, and paste**, **z-order** (To Front / To Back), an **eraser tool**, and **undo / redo**.
+Click **Help** in the app for how to do each of these.
+
+- **Shapes** from the menu, drawn by dragging or placed at a default size. Triangles snap to right, isosceles, and equilateral.
+- **Freehand strokes** with live shape recognition, and **straight lines** whose ends snap to each other and to shape corners.
+- **Select, move, scale, rotate, flip**, and **reorder** shapes, alone or as a group.
+- **Cut, copy, paste**, an **eraser**, and **undo / redo**.
 
 ### Color
 
-Two swatches in the lower right show the **line color** and **fill color**. The swatches indicate the color of the selected shape or, with nothing selected, the color new shapes will get.
-
-- **Color keys.** The five colors are tied to the number keys **1–5**.
-- **Any color.** The rainbow **+** opens a color editor with a saturation / brightness square and a hue slider. In Chrome and Edge browsers, there is also an eyedropper tool.
-- **Saved colors.** Up to six colors can be saved. Saved colors can be dragged onto a numbered swatch, and numbered swatches can be swapped with each other.
+- **Line and fill swatches** show the selected shape's colors, or the colors new shapes will get.
+- **Up to 11 saved colors** with five selectable through the number keys **1–5**.
+- **A color editor** for any color, with an eyedropper in Chrome and Edge.
 
 ### Navigation
 
